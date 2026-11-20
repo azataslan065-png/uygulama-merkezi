@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow,noarchive,nosnippet,noimageindex">
+<meta name="googlebot" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#07070c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Uygulama Merkezi</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-512.png">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
+<div class="grain" aria-hidden="true"></div>
+<div class="splash" id="splash"><div class="logo"></div></div>
+
+<div class="shell">
+  <header class="topbar" id="topbar">
+    <a class="brand" href="#/"><span class="logo" id="logoMark"></span><span id="storeName">Uygulama Merkezi</span></a>
+    <span class="sp"></span>
+    <button class="icon-btn" id="shareStore" aria-label="Mağazayı paylaş"></button>
+  </header>
+  <main id="view" aria-live="polite"></main>
+</div>
+
+<nav class="tabbar glass" id="tabbar">
+  <a href="#/" data-tab="home"></a>
+  <a href="#/favoriler" data-tab="fav"></a>
+</nav>
+
+<script src="js/config.js"></script>
+<script src="js/qrcode.js" defer></script>
+<script src="js/ui.js"></script>
+<script src="js/data.js"></script>
+<script src="js/store.js"></script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "store": {
+    "name": "Uygulama Merkezi",
+    "owner": "AZAT",
+    "tagline": "Sadece davetlilere özel uygulama mağazam.",
+    "accessHash": "",
+    "updatedAt": ""
+  },
+  "categories": ["Oyun", "Spor", "Yapay Zekâ", "Araçlar", "Eğlence"],
+  "apps": []
+}
