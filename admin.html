@@ -11,15 +11,18 @@
 <link rel="icon" href="icons/icon-192.png">
 <link rel="stylesheet" href="css/app.css">
 <style>
-.adm-tabs{position:fixed;left:50%;bottom:calc(12px + var(--safe-b));transform:translateX(-50%);z-index:30;display:flex;gap:4px;padding:6px;border-radius:22px;box-shadow:var(--shadow)}
-.adm-tabs a{display:flex;align-items:center;gap:7px;height:44px;padding:0 14px;border-radius:16px;color:var(--mut);font-weight:700;font-size:13.5px;transition:all .3s var(--ease)}
-.adm-tabs a svg{width:19px;height:19px}
+.adm-tabs{position:fixed;left:0;right:0;margin:0 auto;width:calc(100% - 20px);max-width:560px;bottom:calc(10px + var(--safe-b));z-index:30;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:2px;padding:5px;border-radius:22px;box-shadow:var(--shadow)}
+.adm-tabs a{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:54px;padding:6px 2px;border-radius:16px;color:var(--mut);font-weight:700;font-size:11px;line-height:1.1;min-width:0;transition:all .3s var(--ease)}
+.adm-tabs a span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.adm-tabs a svg{width:21px;height:21px;flex:none}
 .adm-tabs a.on{background:var(--txt);color:#0a0a12}
+.adm-tabs .cnt{position:absolute;top:4px;left:calc(50% + 6px);min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:var(--bad);color:#fff;font-size:10.5px;font-style:normal;display:grid;place-items:center}
+.shell{padding-bottom:calc(110px + var(--safe-b))}
 .pubbtn{position:relative}
 .pubbtn .dot{position:absolute;top:-3px;right:-3px;width:12px;height:12px;border-radius:50%;background:var(--warn);box-shadow:0 0 0 3px var(--bg)}
 .kpis{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
 @media(min-width:760px){.kpis{grid-template-columns:repeat(4,1fr)}}
-.kpi{padding:16px;border-radius:var(--r-lg)}
+.kpi{display:block;padding:16px;border-radius:var(--r-lg);min-width:0}
 .kpi span{display:block;font-size:12.5px;color:var(--mut);font-weight:600}
 .kpi b{display:block;font-size:28px;letter-spacing:-.03em;margin-top:2px}
 .kpi small{color:var(--mut-2);font-size:12px}
@@ -28,20 +31,21 @@
 .row-app .t{flex:1;min-width:0}
 .row-app .t b{display:flex;gap:6px;align-items:center;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .row-app .t small{color:var(--mut);font-size:12.5px}
-.row-app .acts{display:flex;gap:6px}
+.row-app .acts{display:flex;gap:6px;flex:none}
 .row-app .acts .icon-btn{width:38px;height:38px;border-radius:12px}
 .row-app .acts .icon-btn svg{width:17px;height:17px}
 .row-app.hid{opacity:.55}
-.fab{position:fixed;right:calc(16px + env(safe-area-inset-right));bottom:calc(84px + var(--safe-b));z-index:31;width:60px;height:60px;border-radius:20px;background:var(--grad);display:grid;place-items:center;color:#fff;box-shadow:0 14px 34px -10px rgba(124,92,255,.9);transition:transform .2s var(--ease)}
+.fab{position:fixed;right:calc(16px + env(safe-area-inset-right));bottom:calc(92px + var(--safe-b));z-index:31;width:60px;height:60px;border-radius:20px;background:var(--grad);display:grid;place-items:center;color:#fff;box-shadow:0 14px 34px -10px rgba(124,92,255,.9);transition:transform .2s var(--ease)}
 .fab svg{width:26px;height:26px}.fab:active{transform:scale(.94)}
-.form-bar{position:sticky;bottom:calc(76px + var(--safe-b));z-index:25;display:flex;gap:10px;padding:10px;border-radius:20px;margin-top:6px;box-shadow:var(--shadow)}
-.form-bar .btn{flex:1}
+.form-bar{position:sticky;bottom:calc(84px + var(--safe-b));z-index:25;display:flex;gap:10px;padding:10px;border-radius:20px;margin-top:6px;box-shadow:var(--shadow)}
+.form-bar .btn{flex:1 1 auto;padding-left:12px;padding-right:12px}
+.form-bar .btn.ghost{flex:0 1 auto}
 .help{font-size:13px;color:var(--mut);line-height:1.55}
 .help ol{padding-left:18px;margin:8px 0}
 .help{overflow-wrap:anywhere}
 .help code{background:rgba(255,255,255,.08);padding:1px 6px;border-radius:6px;font-size:12px;word-break:break-all}
 .cl-item{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-radius:14px;background:rgba(0,0,0,.25);border:1px solid var(--line);margin-bottom:8px;font-size:13.5px}
-.cl-item div{flex:1}
+.cl-item div{flex:1;min-width:0}
 .auth{min-height:86vh;display:grid;place-items:center}
 .auth .box{width:min(400px,100%);padding:26px 22px;border-radius:var(--r-xl)}
 .auth .logo{width:54px;height:54px;border-radius:18px;margin-bottom:14px}
@@ -63,6 +67,8 @@
 <nav class="adm-tabs glass hidden" id="tabs">
   <a href="#/panel" data-t="panel"></a>
   <a href="#/uygulamalar" data-t="uygulamalar"></a>
+  <a href="#/kisiler" data-t="kisiler"></a>
+  <a href="#/mesajlar" data-t="mesajlar"></a>
   <a href="#/ayarlar" data-t="ayarlar"></a>
 </nav>
 <a class="fab hidden" id="fab" href="#/yeni" aria-label="Yeni uygulama"></a>
@@ -70,6 +76,7 @@
 <script src="js/config.js"></script>
 <script src="js/qrcode.js" defer></script>
 <script src="js/ui.js"></script>
+<script src="js/fb.js"></script>
 <script src="js/data.js"></script>
 <script src="js/admin.js"></script>
 </body>

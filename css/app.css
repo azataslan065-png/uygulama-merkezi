@@ -32,6 +32,8 @@ html{scroll-behavior:smooth}
 body{margin:0;min-height:100vh;overflow-wrap:anywhere;background:var(--bg);color:var(--txt);font-family:var(--font);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;overflow-x:hidden}
 img{display:block;max-width:100%}
 button,input,textarea,select{font:inherit;color:inherit}
+/* Düğme, sekme, çip, rozet ve başlıklarda kelimeler harf harf bölünmesin */
+.btn,.chip,.tabbar a,.badge,.spec,.stat,.kpi,.d-stats,.sec-h,.switch>span,.field>span,h1,h2,h3,h4{overflow-wrap:break-word}
 button{cursor:pointer;border:0;background:none;padding:0}
 a{color:inherit;text-decoration:none}
 ::selection{background:rgba(124,92,255,.45)}
@@ -58,7 +60,9 @@ a{color:inherit;text-decoration:none}
 .topbar{position:sticky;top:0;z-index:20;margin:0 -16px;padding:calc(10px + var(--safe-t)) 16px 10px;display:flex;align-items:center;gap:12px;background:linear-gradient(var(--bg) 30%,rgba(7,7,12,.6));backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border-bottom:1px solid transparent;transition:border-color .3s}
 .topbar.scrolled{border-bottom-color:var(--line)}
 @media(min-width:760px){.topbar{margin:0 -28px;padding-left:28px;padding-right:28px}}
-.brand{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:-.02em;font-size:17px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:-.02em;font-size:17px;min-width:0;flex:0 1 auto}
+.brand>span:last-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.brand .logo{flex:none}
 .logo{width:36px;height:36px;border-radius:11px;background:var(--grad);display:grid;place-items:center;box-shadow:0 8px 24px -8px #7c5cff}
 .logo svg{width:20px;height:20px}
 .topbar .sp{flex:1}
@@ -93,7 +97,7 @@ a{color:inherit;text-decoration:none}
 /* çipler */
 .chips{display:flex;gap:8px;overflow-x:auto;padding:14px 2px 4px;margin:0 -16px;padding-left:16px;padding-right:16px;scrollbar-width:none;scroll-snap-type:x proximity}
 .chips::-webkit-scrollbar{display:none}
-.chip{flex:none;height:38px;padding:0 15px;border-radius:999px;background:var(--glass);border:1px solid var(--line);color:var(--mut);font-weight:600;font-size:14px;transition:all .25s var(--ease);scroll-snap-align:start;display:flex;align-items:center;gap:6px}
+.chip{flex:none;min-height:38px;white-space:nowrap;padding:0 15px;border-radius:999px;background:var(--glass);border:1px solid var(--line);color:var(--mut);font-weight:600;font-size:14px;transition:all .25s var(--ease);scroll-snap-align:start;display:flex;align-items:center;gap:6px}
 .chip:hover{color:var(--txt)}
 .chip.on{background:var(--txt);color:#0a0a12;border-color:transparent}
 .chip .n{font-size:11px;opacity:.6}
@@ -155,14 +159,14 @@ a{color:inherit;text-decoration:none}
 .spec span{display:block;font-size:10.5px;color:var(--mut-2);text-transform:uppercase;letter-spacing:.06em;font-weight:700}
 .spec b{display:block;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:650}
 .actions{display:flex;gap:8px}
-.badge{display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 7px;border-radius:999px;font-size:10.5px;font-weight:800;letter-spacing:.04em}
+.badge{flex:none;white-space:nowrap;display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 7px;border-radius:999px;font-size:10.5px;font-weight:800;letter-spacing:.04em}
 .badge.new{background:rgba(46,229,157,.14);color:var(--ok)}
 .badge.upd{background:rgba(255,192,72,.15);color:var(--warn)}
 .badge.hid{background:rgba(255,77,109,.14);color:var(--bad)}
 
 /* butonlar */
-.btn{height:46px;padding:0 18px;border-radius:15px;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-weight:700;font-size:14.5px;transition:transform .2s var(--ease),background .2s,box-shadow .2s,opacity .2s;white-space:nowrap;user-select:none}
-.btn svg{width:18px;height:18px}
+.btn{min-height:46px;padding:7px 18px;border-radius:15px;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-weight:700;font-size:14.5px;line-height:1.2;text-align:center;transition:transform .2s var(--ease),background .2s,box-shadow .2s,opacity .2s;user-select:none;max-width:100%;min-width:0}
+.btn svg{width:18px;height:18px;flex:none}
 .btn:active{transform:scale(.97)}
 .btn:disabled{opacity:.45;pointer-events:none}
 .btn.primary{background:var(--grad);color:#fff;box-shadow:0 10px 28px -12px rgba(124,92,255,.9)}
@@ -172,8 +176,8 @@ a{color:inherit;text-decoration:none}
 .btn.danger{background:rgba(255,77,109,.14);color:#ff8aa0;border:1px solid rgba(255,77,109,.25)}
 .btn.ok{background:rgba(46,229,157,.14);color:var(--ok);border:1px solid rgba(46,229,157,.25)}
 .btn.block{width:100%}
-.btn.xl{height:58px;border-radius:18px;font-size:17px}
-.btn.sm{height:36px;padding:0 12px;border-radius:11px;font-size:13px}
+.btn.xl{min-height:58px;border-radius:18px;font-size:17px}
+.btn.sm{min-height:36px;padding:5px 12px;border-radius:11px;font-size:13px}
 .actions .btn{flex:1}
 
 /* boş durum */
@@ -189,9 +193,12 @@ a{color:inherit;text-decoration:none}
 .sk-card{padding:16px;border-radius:var(--r-xl);height:236px;display:flex;flex-direction:column;gap:12px}
 
 /* alt gezinme (mobil) */
-.tabbar{position:fixed;left:50%;bottom:calc(12px + var(--safe-b));transform:translateX(-50%);z-index:30;display:flex;gap:4px;padding:6px;border-radius:22px;box-shadow:var(--shadow)}
-.tabbar a{display:flex;align-items:center;gap:7px;height:44px;padding:0 16px;border-radius:16px;color:var(--mut);font-weight:700;font-size:13.5px;transition:all .3s var(--ease)}
-.tabbar a svg{width:19px;height:19px}
+/* Not: left:50% + translateX kullanılmaz; o durumda çubuk ekranın yarısına sıkışıp yazıları harf harf kırıyordu. */
+.tabbar{position:fixed;left:0;right:0;margin:0 auto;width:max-content;max-width:calc(100% - 24px);bottom:calc(12px + var(--safe-b));z-index:30;display:flex;gap:4px;padding:6px;border-radius:22px;box-shadow:var(--shadow)}
+.tabbar a{display:flex;align-items:center;justify-content:center;gap:7px;min-height:44px;padding:4px 16px;border-radius:16px;color:var(--mut);font-weight:700;font-size:13.5px;transition:all .3s var(--ease);min-width:0;white-space:nowrap}
+.tabbar a span{overflow:hidden;text-overflow:ellipsis}
+.tabbar a svg{width:19px;height:19px;flex:none}
+.tabbar .cnt{min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--bad);color:#fff;font-size:11px;display:grid;place-items:center}
 .tabbar a.on{background:var(--txt);color:#0a0a12}
 
 /* ---------- DETAY SAYFASI ---------- */
@@ -327,3 +334,42 @@ select.inp{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.
 .form-sec{padding:18px;border-radius:var(--r-lg);margin-bottom:14px}
 .form-sec h4{margin:0 0 14px;font-size:15px;display:flex;align-items:center;gap:8px}
 .form-sec h4 em{font-style:normal;width:26px;height:26px;border-radius:9px;display:grid;place-items:center;background:var(--glass-2);font-size:13px}
+
+/* ---------- YENİ: puan ve yorumlar ---------- */
+.stars{display:inline-flex;gap:2px;color:#ffd24a;vertical-align:middle}
+.stars svg{width:15px;height:15px}
+.stars.big svg{width:30px;height:30px}
+.stars button{color:var(--mut-2);padding:2px}
+.stars button.on{color:#ffd24a}
+.rate-sum{display:flex;align-items:center;gap:16px;padding:16px;border-radius:var(--r-lg)}
+.rate-sum .avg{font-size:40px;font-weight:800;letter-spacing:-.03em;line-height:1}
+.rate-sum small{color:var(--mut);font-size:12.5px}
+.review{padding:14px;border-radius:var(--r-md);background:var(--glass);border:1px solid var(--line);margin-top:10px}
+.review .h{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.review .h b{font-size:14px}
+.review .h small{color:var(--mut-2);font-size:12px;margin-left:auto}
+.review p{margin:6px 0 0;color:#d0d0de;font-size:14px;white-space:pre-line}
+.rowbtns{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+.rowbtns .btn{flex:1 1 140px}
+
+/* test sürümü */
+.beta-box{margin-top:14px;padding:14px 16px;border-radius:var(--r-lg);background:rgba(255,192,72,.07);border:1px dashed rgba(255,192,72,.35)}
+.beta-box b{color:var(--warn)}
+.beta-box p{margin:4px 0 10px;color:var(--mut);font-size:13.5px}
+.badge.beta{background:rgba(255,192,72,.15);color:var(--warn)}
+.badge.web{background:rgba(0,212,255,.13);color:var(--brand-2)}
+.tl .old{display:inline-flex;margin-top:6px;font-size:13px;color:var(--brand-2);font-weight:700;gap:6px;align-items:center}
+.tl .old svg{width:15px;height:15px}
+
+/* bildirim kutusu */
+.bell{position:relative}
+.bell .dot{position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--bad);color:#fff;font-size:11px;font-weight:800;display:grid;place-items:center;box-shadow:0 0 0 3px var(--bg)}
+.inbox-item{display:flex;gap:12px;align-items:flex-start;padding:12px;border-radius:var(--r-md);background:var(--glass);border:1px solid var(--line);margin-bottom:8px}
+.inbox-item.new{border-color:rgba(124,92,255,.45);background:rgba(124,92,255,.08)}
+.inbox-item .ic{width:42px;height:42px}
+.inbox-item div.t{flex:1;min-width:0}
+.inbox-item b{display:block;font-size:14px}
+.inbox-item span{display:block;color:var(--mut);font-size:13px}
+.inbox-item small{color:var(--mut-2);font-size:11.5px}
+textarea.inp.sm{min-height:80px}
+.shot-pv{margin-top:8px;max-height:160px;border-radius:12px;border:1px solid var(--line)}
