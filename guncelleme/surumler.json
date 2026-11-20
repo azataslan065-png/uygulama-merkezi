@@ -1,6 +1,13 @@
 {
-  "updatedAt": "2026-11-20T22:39:38.145Z",
+  "updatedAt": "2026-11-20T23:09:36.465Z",
   "apps": {
+    "haykir": {
+      "name": "Haykir",
+      "version": "1",
+      "updated": "2026-11-20",
+      "url": "https://github.com/azataslan065-png/haykir/releases/download/apk/Haykir.apk",
+      "store": "https://azataslan065-png.github.io/uygulama-merkezi/#/app/haykir"
+    },
     "futbol-ligi": {
       "name": "Futbol Ligi",
       "version": "V1.0.0",
