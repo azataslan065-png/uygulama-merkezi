@@ -2,7 +2,7 @@
  * Uygulama kabuğu önbellekten açılır (hızlı + çevrimdışı); katalog ve görseller önce ağdan istenir.
  * Kabuk dosyalarından biri değiştiğinde SURUM'ü artır.
  */
-const SURUM = "um-v1";
+const SURUM = "um-v2";
 const KABUK = ["./", "index.html", "css/app.css", "js/config.js", "js/ui.js", "js/data.js", "js/store.js", "js/qrcode.js", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png"];
 
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(SURUM).then((c) => c.addAll(KABUK)).then(() => self.skipWaiting())); });

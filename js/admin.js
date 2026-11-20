@@ -302,7 +302,7 @@
     view.innerHTML = html`<div class="view"><div class="sec-h" style="margin-top:14px"><h2>Ayarlar</h2></div>
       <section class="form-sec glass"><h4><em>⇪</em>Yayınlama (GitHub)</h4>
         <p class="help" style="margin-top:0">Yayınla düğmesi değişiklikleri <code>${C.repo.owner}/${C.repo.name}</code> deposuna yazar. Bunun için bu cihaza bir kez erişim anahtarı girmen yeterli:</p>
-        <div class="help"><ol><li><a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener" style="text-decoration:underline">github.com/settings/personal-access-tokens/new</a> adresini aç.</li>
+        <div class="help"><ol><li><a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener" style="text-decoration:underline">GitHub anahtar sayfasını</a> aç (Fine-grained token).</li>
           <li><b>Repository access</b> → <i>Only select repositories</i> → <code>${C.repo.name}</code>.</li>
           <li><b>Permissions</b> → <i>Contents</i> → <b>Read and write</b>.</li><li>Oluştur, anahtarı kopyala ve aşağıya yapıştır.</li></ol></div>
         <label class="field"><span>Erişim anahtarı</span><input class="inp" type="password" id="tok" value="${tok}" placeholder="github_pat_…" autocomplete="off"><small>Anahtar sadece bu cihazda saklanır ve sadece GitHub'a gönderilir.</small></label>
