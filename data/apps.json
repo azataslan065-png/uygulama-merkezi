@@ -4,9 +4,15 @@
     "name": "Uygulama Merkezi",
     "owner": "AZAT",
     "tagline": "Sadece davetlilere özel uygulama mağazam.",
-    "accessHash": "",
-    "updatedAt": ""
+    "accessHash": "a7dd4693c18a087d008f95fcacdda8bfe97dc4544faffc36602a4cbf76cbd6ab",
+    "updatedAt": "2026-11-20T21:30:50.486Z"
   },
-  "categories": ["Oyun", "Spor", "Yapay Zekâ", "Araçlar", "Eğlence"],
+  "categories": [
+    "Oyun",
+    "Spor",
+    "Yapay Zekâ",
+    "Araçlar",
+    "Eğlence"
+  ],
   "apps": []
 }
