@@ -2,7 +2,7 @@
  * Uygulama kabuğu önbellekten açılır (hızlı + çevrimdışı); görseller önce ağdan istenir.
  * Telefon bildirimleri (web push) burada gösterilir. Kabuk dosyalarından biri değiştiğinde SURUM'ü artır.
  */
-const SURUM = "um-v3";
+const SURUM = "um-v4";
 const KABUK = ["./", "index.html", "css/app.css", "js/config.js", "js/ui.js", "js/fb.js", "js/data.js", "js/store.js", "js/qrcode.js", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png"];
 
 self.addEventListener("install", (e) => { e.waitUntil(caches.open(SURUM).then((c) => c.addAll(KABUK)).then(() => self.skipWaiting())); });

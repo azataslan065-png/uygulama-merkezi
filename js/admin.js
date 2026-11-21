@@ -351,6 +351,7 @@
         <div data-for="apk">
           <label class="field"><span>APK indirme bağlantısı *</span><input class="inp" name="apkUrl" value="${a.apkUrl}" inputmode="url" placeholder="https://github.com/…/releases/download/…/Uygulama.apk"><small>GitHub Releases bağlantısıysa boyut ve indirme sayısı otomatik alınır.</small></label>
           <button type="button" class="btn ghost sm" id="fetchRel" style="margin:-4px 0 14px">${raw(I.cloud)}Boyutu GitHub'dan al</button>
+          <label class="field"><span>Android paket adı</span><input class="inp" name="paket" value="${a.paket}" placeholder="com.azat.haykir" autocapitalize="none" spellcheck="false"><small>Mağaza uygulaması bununla telefonda kurulu olup olmadığını ve güncel olup olmadığını anlar; diğer uygulamaların “Güncelleme var” ekranı da bununla buraya yönlendirir. “GitHub'dan doldur” çoğu zaman kendisi bulur.</small></label>
           <div class="cols c3"><label class="field"><span>Boyut</span><input class="inp" name="size" value="${a.size}" placeholder="12 MB"></label>
             <label class="field"><span>Min. Android</span><input class="inp" name="minAndroid" value="${a.minAndroid}" placeholder="7.0"></label>
             <label class="field"><span>Ek indirme</span><input class="inp" type="number" min="0" name="downloads" value="${a.downloads}"></label></div>
@@ -434,7 +435,7 @@
       const url = F.apkUrl.value.trim(); if (!D.parseRelease(url)) return alertErr("GitHub sürüm bağlantısı değil", "Bağlantı github.com/<kullanıcı>/<depo>/releases/download/<etiket>/<dosya>.apk biçiminde olmalı.");
       loading(true, "GitHub'a soruluyor…"); const s = await D.releaseStats(url, { fresh: true }); loading(false);
       if (!s) return alertErr("Bilgi alınamadı", "Sürüm ya da dosya bulunamadı. Bağlantıyı ve sürümün yayınlandığını kontrol et.");
-      F.size.value = fmtSize(s.size); if (s.updated) F.updated.value = s.updated.slice(0, 10);
+      F.size.value = fmtSize(s.size); if (s.updated) { F.updated.value = s.updated.slice(0, 10); a.apkMs = Date.parse(s.updated) || a.apkMs; }
       toast(`Boyut ${fmtSize(s.size)} · ${fmtNum(s.downloads)} indirme`, "ok");
     };
     // GitHub'dan doldur
@@ -460,6 +461,10 @@
       const apk = await pickApk(rel); if (!apk) return;
       F.kind.value = "apk"; kindSync();
       F.apkUrl.value = apk.url; F.size.value = fmtSize(apk.size); F.version.value = D.versionFrom(rel); F.updated.value = (apk.updated || rel.date || "").slice(0, 10);
+      a.apkMs = Date.parse(apk.updated) || a.apkMs;
+      const pk = await D.packagesOf(info.owner, info.repo);
+      if (pk.length === 1) F.paket.value = pk[0];
+      else if (pk.length > 1 && !F.paket.value) toast("Bu depoda birden fazla uygulama var; paket adını elle yaz (" + pk.join(", ") + ")", "warn", 6000);
       const notes = D.notesFrom(rel.body); if (notes.length) F.whatsNew.value = notes.join("\n");
       // eski sürümler (aynı adlı APK'yı içeren önceki sürümler) → geçmiş
       const olds = withApk.filter((r) => r !== rel).map((r) => ({ r, x: r.apks.find((x) => x.name === apk.name) || r.apks[0] })).filter((o) => o.x && o.x.url !== apk.url);
@@ -496,7 +501,7 @@
       if (errs.length) { const first = $(".inp.err", f); first && first.scrollIntoView({ behavior: "smooth", block: "center" }); return alertErr("Eksik alanlar var", errs.join(", ") + " doldurulmalı."); }
       const split = (v) => v.split("\n").map((s) => s.trim()).filter(Boolean);
       Object.assign(a, {
-        id: nid, name: F.name.value.trim(), short: F.short.value.trim(), description: F.description.value.trim(), kind: F.kind.value, ghRepo: F.ghRepo.value.trim(),
+        id: nid, paket: F.paket.value.trim(), name: F.name.value.trim(), short: F.short.value.trim(), description: F.description.value.trim(), kind: F.kind.value, ghRepo: F.ghRepo.value.trim(),
         category: F.category.value === "__new" ? "" : F.category.value, accent: F.accent.value, hidden: !F.visible.checked, featured: F.featured.checked,
         version: F.version.value.trim(), updated: F.updated.value || new Date().toISOString().slice(0, 10), apkUrl: F.apkUrl.value.trim(), webUrl: F.webUrl.value.trim(),
         size: F.size.value.trim(), minAndroid: F.minAndroid.value.trim(), downloads: Math.max(0, +F.downloads.value || 0),

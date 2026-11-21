@@ -1,0 +1,27 @@
+plugins { id 'com.android.application' }
+def NO = (System.getenv('GITHUB_RUN_NUMBER') ?: '1') as int
+android {
+    namespace 'com.azat.uygulamamerkezi'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'com.azat.uygulamamerkezi'
+        minSdk 24
+        targetSdk 34
+        versionCode NO
+        versionName '1.0.' + NO
+        resValue 'string', 'app_name', 'Uygulama Merkezi'
+    }
+    signingConfigs {
+        imza {
+            // Anahtar depoda durur: her derleme aynı imzayı taşır, yeni APK eskisinin üstüne kurulur.
+            storeFile file('../uygulamamerkezi.jks')
+            storePassword 'uygulamamerkezi'
+            keyAlias 'uygulamamerkezi'
+            keyPassword 'uygulamamerkezi'
+        }
+    }
+    buildTypes { release { minifyEnabled false; signingConfig signingConfigs.imza } }
+    buildFeatures { buildConfig true }
+    lint { checkReleaseBuilds false; abortOnError false }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+}

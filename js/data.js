@@ -31,6 +31,7 @@
     return {
       id: a.id, name: a.name || "", short: a.short || "", description: a.description || "",
       kind: a.kind === "web" ? "web" : "apk", webUrl: a.webUrl || "", ghRepo: a.ghRepo || "",
+      paket: String(a.paket || "").trim(), apkMs: +a.apkMs || 0,
       features: list(a.features), category: a.category || "", version: String(a.version || "1.0"),
       updated: a.updated || today(), created: a.created || a.updated || today(),
       size: a.size || "", minAndroid: a.minAndroid || "", downloads: +a.downloads || 0, apkUrl: a.apkUrl || "",
@@ -144,6 +145,12 @@
       await GitHub.put(path, await b64FromBlob(await blobFromDataUrl(j.v)), `Görsel: ${j.a.name} (${j.name})`);
       j.setter(path);
     }
+    // Her APK'nın GitHub'daki yüklenme zamanı: telefondaki kurulum bundan eskiyse "Güncelle" gösterilir
+    onStep("APK bilgileri tazeleniyor…");
+    await Promise.all(out.apps.filter((a) => a.kind !== "web" && parseRelease(a.apkUrl)).map(async (a) => {
+      const s = await releaseStats(a.apkUrl, { fresh: true });
+      if (s && s.updated) { a.apkMs = Date.parse(s.updated) || a.apkMs; if (!a.size && s.size) a.size = (s.size / 1048576).toFixed(1).replace(".", ",") + " MB"; }
+    }));
     out.store.updatedAt = new Date().toISOString();
     const beta = {};
     out.apps.forEach((a) => { if (a.beta) beta[a.id] = a.beta; });
@@ -165,7 +172,7 @@
     let versionsNote = "";
     if (GitHub.token) {
       onStep("Sürüm dosyası yazılıyor…");
-      const v = {}; out.apps.filter((a) => !a.hidden).forEach((a) => (v[a.id] = { name: a.name, version: a.version, updated: a.updated, url: linkOf(a), store: C.siteUrl + "#/app/" + encodeURIComponent(a.id) }));
+      const v = {}; out.apps.filter((a) => !a.hidden).forEach((a) => (v[a.id] = { name: a.name, version: a.version, updated: a.updated, paket: a.paket || "", apkMs: a.apkMs || 0, url: linkOf(a), store: C.siteUrl + "#/app/" + encodeURIComponent(a.id) }));
       try { await GitHub.put(C.versionsPath, b64FromText(JSON.stringify({ updatedAt: out.store.updatedAt, apps: v }, null, 2) + "\n"), "Sürüm dosyası güncellendi"); }
       catch (e) { versionsNote = "Sürüm dosyası yazılamadı: " + e.message; }
     } else versionsNote = "GitHub anahtarı olmadığı için uygulama içi güncelleme dosyası yazılmadı.";
@@ -193,6 +200,11 @@
       apks: (r.assets || []).filter((x) => /\.apk$/i.test(x.name)).map((x) => ({ name: x.name, url: x.browser_download_url, size: x.size, downloads: x.download_count, updated: x.updated_at }))
     }));
     return { owner: p.owner, repo: p.repo, description: info.description || "", homepage: info.homepage || "", pages: info.has_pages ? `https://${p.owner}.github.io/${p.repo}/` : "", releases: rels };
+  }
+  // Depodaki android/app/build.gradle'dan paket adı(ları) (applicationId)
+  async function packagesOf(owner, repo) {
+    try { const r = await fetch(`https://raw.githubusercontent.com/${owner}/${repo}/HEAD/android/app/build.gradle`, { cache: "no-store" }); if (!r.ok) return [];
+      return [...new Set([...(await r.text()).matchAll(/applicationId\s*[=(]?\s*['"]([\w.]+)['"]/g)].map((m) => m[1]))]; } catch { return []; }
   }
   // sürüm adından okunabilir numara: "v1.2.0" → "1.2.0"; numarasız etiketlerde ("apk") tarih kullanılır
   function versionFrom(rel) {
@@ -258,5 +270,5 @@
     setInboxSeen(t) { LS.set("um.inboxSeen", t); }
   };
 
-  window.UMData = { normalize, normApp, normBeta, linkOf, loadCatalog, loadBeta, draft, publish, changes, GitHub, releases, versionFrom, notesFrom, parseRepo, releaseStats, parseRelease, member, user, LS, arr };
+  window.UMData = { packagesOf, normalize, normApp, normBeta, linkOf, loadCatalog, loadBeta, draft, publish, changes, GitHub, releases, versionFrom, notesFrom, parseRepo, releaseStats, parseRelease, member, user, LS, arr };
 })();

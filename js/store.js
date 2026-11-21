@@ -8,7 +8,11 @@
   const { $, $$, html, raw, I, toast, alertErr, modal, shareSheet, fmtNum, fmtDate, fmtSize, ago, appIcon, starsHtml, readImage } = UI;
   const D = UMData, C = UM_CONFIG;
   const view = $("#view");
-  const state = { db: null, offline: false, q: "", cat: "Tümü", stats: {}, invite: null, beta: {}, reviews: {}, inbox: [] };
+  const state = { db: null, offline: false, q: "", cat: "Tümü", stats: {}, invite: null, beta: {}, reviews: {}, inbox: [], busy: {}, pendingV: {} };
+  // Uygulama Merkezi Android uygulamasının içinde mi açıldı? (köprü: android/…/Ana.java "UMYerel")
+  const Y = window.UMYerel || null;
+  const STORE_APK = "https://github.com/" + C.repo.owner + "/" + C.repo.name + "/releases/download/apk/Uygulama-Merkezi.apk";
+  const STORE_PKG = "com.azat.uygulamamerkezi";
 
   /* ---------- statik parçalar ---------- */
   $("#splash .logo").innerHTML = I.logo; $("#logoMark").innerHTML = I.logo;
@@ -21,7 +25,27 @@
   const visibleApps = () => state.db.apps.filter((a) => !a.hidden);
   const byId = (id) => visibleApps().find((a) => a.id === id);
   const isNew = (a) => (Date.now() - new Date(a.created || a.updated)) / 864e5 < 14;
-  const hasUpdate = (a) => { const v = D.user.installed()[a.id]; return a.kind !== "web" && v && v !== a.version; };
+  /* Telefondaki durum (yalnızca mağaza uygulamasında): yukle | guncelle | ac | null (bilinmiyor) */
+  function status(a) {
+    if (!Y || a.kind === "web" || !a.paket) return null;
+    let i; try { i = JSON.parse(Y.bilgi(a.paket)); } catch { return null; }
+    if (!i.kurulu) return "yukle";
+    const rec = D.user.installed()[a.id];
+    // GitHub'daki APK'nın gerçek yüklenme zamanı (canlı), yoksa katalogdaki; telefondaki kurulum bundan eskiyse güncelleme var
+    const apk = (state.stats[a.id] && Date.parse(state.stats[a.id].updated)) || a.apkMs;
+    if (apk && i.zaman < apk - 120000) return "guncelle";
+    if (!apk && rec && rec !== a.version) return "guncelle";
+    return "ac";
+  }
+  const hasUpdate = (a) => { if (a.kind === "web") return false; const s = status(a); if (s) return s === "guncelle"; const v = D.user.installed()[a.id]; return !!(v && v !== a.version); };
+  function action(a) {
+    if (a.kind === "web") return { label: "Aç", icon: I.open };
+    if (state.busy[a.id] != null) return { label: state.busy[a.id], icon: I.dl, busy: true };
+    const s = status(a);
+    if (s === "ac") return { label: "Aç", icon: I.open };
+    if (s === "guncelle" || hasUpdate(a)) return { label: "Güncelle", icon: I.dl };
+    return { label: Y ? "Yükle" : "İndir", icon: I.dl };
+  }
   const appUrl = (a) => C.siteUrl + "#/app/" + encodeURIComponent(a.id);
   const isWeb = (a) => a.kind === "web";
   const betaOf = (a) => (state.invite && state.invite.beta ? state.beta[a.id] : null);
@@ -55,7 +79,7 @@
       </div>
       <div class="actions">
         <a class="btn ghost" href="#/app/${encodeURIComponent(a.id)}">Detaylar</a>
-        <button class="btn primary" data-dl-btn="${a.id}">${raw(isWeb(a) ? I.open : I.dl)}${isWeb(a) ? "Aç" : upd ? "Güncelle" : "İndir"}</button>
+        <button class="btn primary" data-dl-btn="${a.id}">${raw(action(a).icon)}<span>${action(a).label}</span></button>
       </div>
     </article>`.s;
   }
@@ -70,11 +94,62 @@
     if (!a) return;
     const url = opt.url || (isWeb(a) ? a.webUrl : a.apkUrl), version = opt.version || a.version;
     if (!url) return alertErr(isWeb(a) ? "Adres yok" : "İndirme bağlantısı yok", `${a.name} için henüz bir ${isWeb(a) ? "web adresi" : "APK bağlantısı"} eklenmemiş.`);
+    if (!isWeb(a) && Y) {   // mağaza uygulaması: tarayıcıya uğramadan indir ve kur
+      if (state.busy[a.id] != null) return toast("İniyor, biraz bekle", "info");
+      if (!opt.url && status(a) === "ac") { if (!Y.ac(a.paket)) toast("Uygulama açılamadı", "err"); return; }
+      state.busy[a.id] = "İniyor…"; state.pendingV[a.id] = opt.beta || opt.old ? null : version; refreshButtons(a.id);
+      if (!(state.invite && state.invite.owner)) D.member.download(a, version, opt.beta);
+      Y.kur(a.id, url);
+      return;
+    }
+    if (!isWeb(a) && !opt.skipAsk && !/UygulamaMerkeziApp/.test(navigator.userAgent)) {
+      const go = await UI.dialog({ title: "Tarayıcıdan indirme", message: "Tarayıcı APK dosyalarında “Dosya zararlı olabilir” uyarısı gösterir; bu, sitenin kapatabileceği bir uyarı değildir. Uyarısız ve tek dokunuşla kurmak için Uygulama Merkezi uygulamasını bir kez kur; tüm uygulamaları ve güncellemeleri oradan yaparsın.", type: "info",
+        actions: [{ label: "Yine de indir", value: "dl" }, { label: "Mağaza uygulamasını al", value: "store", primary: true }] });
+      if (go === "store") return openLink(STORE_APK);
+      if (go !== "dl") return;
+    }
     if (!isWeb(a) && !opt.beta && !opt.old) D.user.markInstalled(a.id, a.version);
     if (!(state.invite && state.invite.owner)) D.member.download(a, version, opt.beta);
     toast(isWeb(a) ? `${a.name} açılıyor…` : `${a.name}${opt.beta ? " (test)" : ""} v${version} indiriliyor…`, "ok");
     openLink(url);
     setTimeout(() => refreshStats(a, true), 4000);
+  }
+
+  /* ---------- mağaza uygulamasından gelen olaylar ---------- */
+  function refreshButtons(only) {
+    $$("[data-dl-btn]").forEach((b) => {
+      const id = b.dataset.dlBtn; if (only && id !== only) return;
+      const a = byId(id); if (!a || a.kind === "web") return;
+      const ac = action(a), sp = $("span", b);
+      b.innerHTML = ac.icon + "<span></span>"; $("span", b).textContent = b.dataset.long && !ac.busy ? (ac.label === "Aç" ? a.name + " aç" : a.name + " · " + ac.label.toLocaleLowerCase("tr") + " · " + sizeOf(a)) : ac.label;
+      b.classList.toggle("busy", !!ac.busy);
+    });
+  }
+  window.UMYerelOlay = (e) => {
+    if (!e) return;
+    if (e.tur === "odak") { if (state.db) { refreshButtons(); $$(".card").forEach((c) => { const a = byId(c.dataset.id); const h = $("h3", c); if (a && h) { const u = hasUpdate(a); const bd = $(".badge.upd", h); if (!u && bd) bd.remove(); } }); } return; }
+    const a = state.db && byId(e.id), name = a ? a.name : "Uygulama";
+    if (e.tur === "ilerleme") { state.busy[e.id] = e.toplam > 0 ? "%" + Math.min(100, Math.round(e.inen * 100 / e.toplam)) : (e.inen / 1048576).toFixed(1).replace(".", ",") + " MB"; }
+    else if (e.tur === "kuruluyor") state.busy[e.id] = "Kuruluyor…";
+    else if (e.tur === "onay") { state.busy[e.id] = "Onay bekleniyor…"; toast("Açılan ekranda “Yükle”ye dokun", "info", 3500); }
+    else if (e.tur === "izin") { delete state.busy[e.id]; UI.dialog({ title: "Bir kerelik izin", message: "Android, uygulama kurabilmek için Uygulama Merkezi'ne izin vermeni istiyor. Açılan ekranda “Bu kaynağa izin ver”i aç ve geri dön; kurulum kendiliğinden devam eder.", type: "info" }); }
+    else if (e.tur === "bitti") {
+      delete state.busy[e.id];
+      if (e.mesaj) alertErr(name + " kurulamadı", e.mesaj);
+      else { if (state.pendingV[e.id]) D.user.markInstalled(e.id, state.pendingV[e.id]); toast(name + " kuruldu ✓", "ok"); if (a) refreshStats(a, true); }
+      delete state.pendingV[e.id];
+    }
+    refreshButtons(e.id);
+  };
+  // Mağaza uygulamasının kendi güncellemesi (yönetici eylemi gerekmez: GitHub'daki son APK'ya bakılır)
+  async function storeSelfUpdate() {
+    if (!Y) return;
+    try {
+      const me = JSON.parse(Y.bilgi(STORE_PKG)); const s = await D.releaseStats(STORE_APK, { fresh: true });
+      if (!s || !me.kurulu || me.zaman >= Date.parse(s.updated) - 120000) return;
+      const ok = await UI.dialog({ title: "Uygulama Merkezi güncellemesi", message: "Mağaza uygulamasının yeni sürümü hazır (" + fmtSize(s.size) + ").", type: "info", actions: [{ label: "Sonra", value: false }, { label: "Güncelle", value: true, primary: true }] });
+      if (ok) { state.busy.__store = "İniyor…"; Y.kur("__store", STORE_APK); toast("Mağaza güncellemesi iniyor…", "info"); }
+    } catch {}
   }
 
   /* ---------- GitHub istatistikleri ---------- */
@@ -84,6 +159,7 @@
     state.stats[a.id] = s;
     $$(`[data-dl="${a.id}"]`).forEach((el) => (el.textContent = fmtNum(downloadsOf(a))));
     $$(`[data-size="${a.id}"]`).forEach((el) => (el.textContent = sizeOf(a)));
+    if (Y && state.busy[a.id] == null) refreshButtons(a.id);
   }
   const loadAllStats = () => visibleApps().forEach((a) => refreshStats(a));
 
@@ -111,6 +187,7 @@
         <p>${st.tagline || "Sadece davetlilere özel uygulama mağazası."}</p>
         <div class="stats"><div class="stat"><b>${apps.length}</b><span>uygulama</span></div><div class="stat"><b id="totalDl">${fmtNum(totalDl)}</b><span>indirme</span></div><div class="stat"><b>${st.updatedAt ? ago(st.updatedAt) : "—"}</b><span>son güncelleme</span></div></div>
       </section>`}
+      ${!Y && !favOnly ? html`<div class="note" style="margin-top:14px;background:rgba(124,92,255,.1);border:1px solid rgba(124,92,255,.3);display:flex;gap:12px;align-items:center;flex-wrap:wrap"><div style="flex:1 1 200px"><b>Uygulama Merkezi uygulamasını kur</b><br><span style="color:var(--mut);font-size:13px">Uygulamaları uyarısız, tek dokunuşla kur ve güncelle.</span></div><a class="btn primary sm" href="${STORE_APK}" rel="noopener">${raw(I.dl)}İndir</a></div>` : ""}
       <div class="search">${raw(I.search)}<input id="q" type="search" placeholder="Uygulama ara…" value="${state.q}" autocomplete="off" enterkeyhint="search" aria-label="Uygulama ara">${state.q ? raw(`<button class="clear" id="qClear" aria-label="Temizle">${I.x}</button>`) : ""}</div>
       ${cats.length > 2 || state.cat !== "Tümü" ? html`<div class="chips" role="tablist">${cats.map((c) => html`<button class="chip ${c === state.cat ? "on" : ""}" data-cat="${c}">${c}<span class="n">${c === "Tümü" ? apps.length : apps.filter((a) => a.category === c).length}</span></button>`)}</div>` : ""}
       ${showExtras && featured ? html`<section class="sec"><a class="feature" href="#/app/${encodeURIComponent(featured.id)}"><img src="${featured.cover}" alt="" decoding="async"><div class="fbody">${appIcon(featured)}<div><span class="tag">Öne çıkan</span><h3>${featured.name}</h3><p>${featured.short}</p></div></div></a></section>` : ""}
@@ -155,11 +232,11 @@
         <div><b data-dl="${a.id}">${web ? "—" : fmtNum(downloadsOf(a))}</b><span>indirme</span></div>
       </div>
       <div class="d-cta">
-        <button class="btn primary xl" id="dlBig">${raw(web ? I.open : I.dl)}${web ? "Uygulamayı aç" : upd ? "Güncellemeyi indir" : "İndir"}</button>
+        <button class="btn primary xl" id="dlBig" data-dl-btn="${a.id}">${raw(action(a).icon)}<span>${web ? "Uygulamayı aç" : action(a).label}</span></button>
         <button class="icon-btn ${fav ? "on" : ""}" id="favBig" aria-label="Favori">${raw(fav ? I.star : I.starO)}</button>
         <button class="icon-btn" id="shareBig" aria-label="Paylaş">${raw(I.share)}</button>
       </div>
-      ${upd ? html`<div class="note warn" style="margin-top:12px">Yüklü sürümün v${D.user.installed()[a.id]} · yeni sürüm v${a.version} hazır.</div>` : ""}
+      ${upd ? html`<div class="note warn" style="margin-top:12px">Yeni sürüm v${a.version} hazır. ${Y ? "“Güncelle”ye dokun; uygulamanın içinden güncellenmez, burada güncellenir." : ""}</div>` : ""}
       ${web ? html`<p class="help" style="margin:10px 2px 0;color:var(--mut);font-size:13px">İpucu: Açtıktan sonra tarayıcı menüsünden “Ana ekrana ekle”yi seçersen uygulama gibi açılır.</p>` : ""}
       ${b ? html`<div class="beta-box"><b>🧪 Test sürümü v${b.version}</b><span class="badge beta" style="margin-left:6px">SADECE TESTÇİLER</span>
           <p>Henüz herkese açılmadı; hatalar olabilir. ${fmtDate(b.updated)}</p>
@@ -179,10 +256,10 @@
         <div><span>Depolama</span><b>${r.storage || "—"}</b></div>
         <div><span>İzinler</span><b>${r.permissions.length ? r.permissions.join(", ") : "Özel izin yok"}</b></div>
       </div></section>`}
-      <section class="block" style="margin-bottom:12px"><button class="btn primary xl block" id="dlBottom">${raw(web ? I.open : I.dl)}${web ? a.name + " aç" : a.name + " indir · " + sizeOf(a)}</button></section>
+      <section class="block" style="margin-bottom:12px"><button class="btn primary xl block" id="dlBottom" data-dl-btn="${a.id}" data-long="1">${raw(action(a).icon)}<span>${web ? a.name + " aç" : action(a).label === "Aç" ? a.name + " aç" : a.name + " · " + action(a).label.toLocaleLowerCase("tr") + " · " + sizeOf(a)}</span></button></section>
     </div>`.s;
     $("#backBtn").onclick = () => (history.length > 1 ? history.back() : (location.hash = "#/"));
-    $("#dlBig").onclick = $("#dlBottom").onclick = () => download(a);
+    $("#dlBig").onclick = $("#dlBottom").onclick = () => download(a);   // (data-dl-btn yalnızca durum yazısı için)
     if (b) $("#betaDl").onclick = () => download(a, { url: b.webUrl || b.apkUrl, version: b.version, beta: true });
     $$("[data-old]").forEach((x) => x.onclick = () => { const c = a.changelog[+x.dataset.old]; download(a, { url: c.url, version: c.version, old: true }); });
     $("#favBig").onclick = (e) => { const on = D.user.toggleFav(a.id); const bt = e.currentTarget; bt.classList.toggle("on", on); bt.innerHTML = on ? I.star : I.starO; toast(on ? "Favorilere eklendi" : "Favorilerden çıkarıldı", on ? "ok" : "info", 1600); };
@@ -308,6 +385,7 @@
     $("#tabbar").classList.remove("hidden"); $("#bell").classList.remove("hidden"); $("#shareStore").classList.remove("hidden");
     const h = location.hash || "#/";
     $$("#tabbar a").forEach((a) => a.classList.toggle("on", h.startsWith("#/app/") || h.startsWith("#/bildirimler") ? false : (a.dataset.tab === "fav") === h.startsWith("#/favoriler")));
+    if (h.startsWith("#/paket/")) { const pk = decodeURIComponent(h.slice(8)), a = visibleApps().find((x) => x.paket === pk); if (a) { location.replace("#/app/" + encodeURIComponent(a.id)); return; } toast("Bu uygulama henüz mağazada yok", "warn", 3500); location.replace("#/"); return; }
     if (h.startsWith("#/app/")) detail(decodeURIComponent(h.slice(6)));
     else if (h.startsWith("#/favoriler")) home(true);
     else if (h.startsWith("#/bildirimler")) inbox();
@@ -341,7 +419,7 @@
       $("#storeName").textContent = r.db.store.name; document.title = r.db.store.name;
       render();
       if (!inv.owner) D.member.touch(inv);
-      loadAllStats(); notifyUpdates(); loadInbox();
+      loadAllStats(); notifyUpdates(); loadInbox(); setTimeout(storeSelfUpdate, 2500);
       FB.get("reviews").then((v) => { state.reviews = v || {}; if (!location.hash.startsWith("#/app/") && !location.hash.startsWith("#/bildirimler")) render(); }).catch(() => {});
       if (r.offline) toast("Çevrimdışısın · son kaydedilen liste gösteriliyor", "warn", 3500);
     } catch (e) {

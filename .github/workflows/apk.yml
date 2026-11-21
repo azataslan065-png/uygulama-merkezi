@@ -1,0 +1,31 @@
+# Uygulama Merkezi APK'sı (mağaza uygulaması). Kabuk (android/) değişince ya da elle derlenir; APK "apk" sürümüne yüklenir.
+# Mağaza sayfası sitede durduğu için sayfa değişiklikleri yeni APK gerektirmez.
+name: APK
+on:
+  push:
+    branches: [main]
+    paths: [android/**, .github/workflows/apk.yml]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  derle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: '8.14.3' }
+      - name: Derle
+        working-directory: android
+        run: gradle assembleRelease --no-daemon --console=plain
+      - name: Yayinla
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir out
+          cp android/app/build/outputs/apk/release/*.apk out/Uygulama-Merkezi.apk
+          ls -la out
+          gh release delete apk -y --cleanup-tag 2>/dev/null || true
+          gh release create apk out/Uygulama-Merkezi.apk --title "Uygulama Merkezi APK (derleme $GITHUB_RUN_NUMBER)" --notes "Mağaza uygulaması. Telefona bir kez kur; uygulamalar artık bunun içinden kurulur ve güncellenir." --latest

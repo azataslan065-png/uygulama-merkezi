@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <uses-permission android:name="android.permission.INTERNET"/>
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+  <!-- Uygulamaları mağazanın içinde kurmak ve (Android 12+) kendi kurduklarını onaysız güncellemek için -->
+  <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+  <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION"/>
+  <!-- Hangi uygulamanın kurulu olduğunu ve sürümünü görmek için -->
+  <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"/>
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+  <application android:label="@string/app_name" android:icon="@mipmap/ic_launcher" android:theme="@style/Tema"
+      android:hardwareAccelerated="true" android:usesCleartextTraffic="false" android:allowBackup="false">
+    <activity android:name=".Ana" android:exported="true" android:launchMode="singleTask"
+        android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode|density|fontScale"
+        android:windowSoftInputMode="adjustResize">
+      <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+      <!-- Diğer uygulamaların güncelleme ekranı buraya yönlendirir: uygulamamerkezi://paket/com.azat.haykir -->
+      <intent-filter><action android:name="android.intent.action.VIEW"/><category android:name="android.intent.category.DEFAULT"/><category android:name="android.intent.category.BROWSABLE"/>
+        <data android:scheme="uygulamamerkezi"/></intent-filter>
+    </activity>
+    <receiver android:name=".KurulumAlici" android:exported="false"/>
+    <receiver android:name=".Acilis" android:exported="false">
+      <intent-filter><action android:name="android.intent.action.BOOT_COMPLETED"/><action android:name="android.intent.action.MY_PACKAGE_REPLACED"/></intent-filter>
+    </receiver>
+    <service android:name=".Denetci" android:permission="android.permission.BIND_JOB_SERVICE" android:exported="false"/>
+  </application>
+</manifest>
