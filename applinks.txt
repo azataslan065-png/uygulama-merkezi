@@ -1,0 +1,5 @@
+  com.azat.uygulamamerkezi:
+    ID: e5128978-fd35-435f-9a1c-0cc16d9e47c5
+    Signatures: [DC:28:DD:18:EF:2D:8C:E0:31:10:4C:5D:88:D4:5B:D2:A2:F7:CB:BC:1D:8A:08:B6:5C:12:33:59:B2:16:62:8E]
+    Domain verification state:
+      azataslan065-png.github.io: legacy_failure
