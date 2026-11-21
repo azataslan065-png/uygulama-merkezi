@@ -13,6 +13,12 @@
   const Y = window.UMYerel || null;
   const STORE_APK = "https://github.com/" + C.repo.owner + "/" + C.repo.name + "/releases/download/apk/Uygulama-Merkezi.apk";
   const STORE_PKG = "com.azat.uygulamamerkezi";
+  // Tarayıcıdan uygulamayı aç (davet koduyla). Uygulama kurulu değilse Android mağaza APK'sını indirir.
+  const isAndroid = /Android/i.test(navigator.userAgent);
+  function appLink() {
+    const kod = D.member.code(), path = kod ? "davet/" + kod : "ac/";
+    return isAndroid ? `intent://${path}#Intent;scheme=uygulamamerkezi;package=${STORE_PKG};S.browser_fallback_url=${encodeURIComponent(STORE_APK)};end` : STORE_APK;
+  }
 
   /* ---------- statik parçalar ---------- */
   $("#splash .logo").innerHTML = I.logo; $("#logoMark").innerHTML = I.logo;
@@ -104,8 +110,8 @@
     }
     if (!isWeb(a) && !opt.skipAsk && !/UygulamaMerkeziApp/.test(navigator.userAgent)) {
       const go = await UI.dialog({ title: "Tarayıcıdan indirme", message: "Tarayıcı APK dosyalarında “Dosya zararlı olabilir” uyarısı gösterir; bu, sitenin kapatabileceği bir uyarı değildir. Uyarısız ve tek dokunuşla kurmak için Uygulama Merkezi uygulamasını bir kez kur; tüm uygulamaları ve güncellemeleri oradan yaparsın.", type: "info",
-        actions: [{ label: "Yine de indir", value: "dl" }, { label: "Mağaza uygulamasını al", value: "store", primary: true }] });
-      if (go === "store") return openLink(STORE_APK);
+        actions: [{ label: "Yine de indir", value: "dl" }, { label: "Uygulamada aç", value: "store", primary: true }] });
+      if (go === "store") { location.href = appLink(); return; }
       if (go !== "dl") return;
     }
     if (!isWeb(a) && !opt.beta && !opt.old) D.user.markInstalled(a.id, a.version);
@@ -187,7 +193,7 @@
         <p>${st.tagline || "Sadece davetlilere özel uygulama mağazası."}</p>
         <div class="stats"><div class="stat"><b>${apps.length}</b><span>uygulama</span></div><div class="stat"><b id="totalDl">${fmtNum(totalDl)}</b><span>indirme</span></div><div class="stat"><b>${st.updatedAt ? ago(st.updatedAt) : "—"}</b><span>son güncelleme</span></div></div>
       </section>`}
-      ${!Y && !favOnly ? html`<div class="note" style="margin-top:14px;background:rgba(124,92,255,.1);border:1px solid rgba(124,92,255,.3);display:flex;gap:12px;align-items:center;flex-wrap:wrap"><div style="flex:1 1 200px"><b>Uygulama Merkezi uygulamasını kur</b><br><span style="color:var(--mut);font-size:13px">Uygulamaları uyarısız, tek dokunuşla kur ve güncelle.</span></div><a class="btn primary sm" href="${STORE_APK}" rel="noopener">${raw(I.dl)}İndir</a></div>` : ""}
+      ${!Y && !favOnly ? html`<div class="note" style="margin-top:14px;background:rgba(124,92,255,.1);border:1px solid rgba(124,92,255,.3);display:flex;gap:12px;align-items:center;flex-wrap:wrap"><div style="flex:1 1 200px"><b>Uygulama Merkezi uygulamasında aç</b><br><span style="color:var(--mut);font-size:13px">Uygulamaları uyarısız, tek dokunuşla kur ve güncelle. Uygulama yoksa önce indirilir.</span></div><a class="btn primary sm" href="${appLink()}" rel="noopener">${raw(I.open)}Uygulamada aç</a></div>` : ""}
       <div class="search">${raw(I.search)}<input id="q" type="search" placeholder="Uygulama ara…" value="${state.q}" autocomplete="off" enterkeyhint="search" aria-label="Uygulama ara">${state.q ? raw(`<button class="clear" id="qClear" aria-label="Temizle">${I.x}</button>`) : ""}</div>
       ${cats.length > 2 || state.cat !== "Tümü" ? html`<div class="chips" role="tablist">${cats.map((c) => html`<button class="chip ${c === state.cat ? "on" : ""}" data-cat="${c}">${c}<span class="n">${c === "Tümü" ? apps.length : apps.filter((a) => a.category === c).length}</span></button>`)}</div>` : ""}
       ${showExtras && featured ? html`<section class="sec"><a class="feature" href="#/app/${encodeURIComponent(featured.id)}"><img src="${featured.cover}" alt="" decoding="async"><div class="fbody">${appIcon(featured)}<div><span class="tag">Öne çıkan</span><h3>${featured.name}</h3><p>${featured.short}</p></div></div></a></section>` : ""}
@@ -370,7 +376,8 @@
     $("#tabbar").classList.add("hidden"); $("#bell").classList.add("hidden"); $("#shareStore").classList.add("hidden");
     view.innerHTML = html`<div class="gate view"><div class="box glass"><div class="lock">🔒</div><h2 style="margin:0 0 8px">Bu mağaza özeldir</h2>
       <p style="color:var(--mut);margin:0 0 18px">${msg || "Uygulamaları görmek için sana gönderilen davet bağlantısını aç ya da davet kodunu gir."}</p>
-      <input class="inp" id="code" placeholder="Davet kodu" autocomplete="off" autocapitalize="none" spellcheck="false"><button class="btn primary block" style="margin-top:10px" id="codeBtn">Giriş</button></div></div>`.s;
+      <input class="inp" id="code" placeholder="Davet kodu" autocomplete="off" autocapitalize="none" spellcheck="false"><button class="btn primary block" style="margin-top:10px" id="codeBtn">Giriş</button>
+      ${!Y && isAndroid ? html`<a class="btn ghost block" style="margin-top:10px" href="${appLink()}">${raw(I.open)}Uygulama Merkezi uygulamasında aç</a>` : ""}</div></div>`.s;
     const go = async () => {
       UI.loading(true, "Kontrol ediliyor…");
       try { await D.member.claim($("#code").value); UI.loading(false); toast("Hoş geldin!", "ok"); start(); }

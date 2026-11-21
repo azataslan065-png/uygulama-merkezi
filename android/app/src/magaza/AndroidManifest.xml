@@ -5,6 +5,11 @@
       <!-- Diğer uygulamaların güncelleme ekranı buraya yönlendirir: uygulamamerkezi://paket/com.azat.haykir (yalnızca mağaza) -->
       <intent-filter><action android:name="android.intent.action.VIEW"/><category android:name="android.intent.category.DEFAULT"/><category android:name="android.intent.category.BROWSABLE"/>
         <data android:scheme="uygulamamerkezi"/></intent-filter>
+      <!-- Davet ve paylaşım bağlantıları (https://azataslan065-png.github.io/uygulama-merkezi/…) doğrudan uygulamada açılır.
+           Alan adı doğrulaması (/.well-known/assetlinks.json) varsa Android sormadan açar; yoksa telefonun
+           Ayarlar > Uygulamalar > Uygulama Merkezi > Varsayılan olarak aç bölümünden bağlantı elle eklenebilir. -->
+      <intent-filter android:autoVerify="true"><action android:name="android.intent.action.VIEW"/><category android:name="android.intent.category.DEFAULT"/><category android:name="android.intent.category.BROWSABLE"/>
+        <data android:scheme="https" android:host="azataslan065-png.github.io" android:pathPrefix="/uygulama-merkezi"/></intent-filter>
     </activity>
   </application>
 </manifest>

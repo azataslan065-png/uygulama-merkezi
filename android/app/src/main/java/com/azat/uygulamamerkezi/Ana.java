@@ -70,12 +70,26 @@ public class Ana extends Activity {
                 return true;
             }
         });
-        w.loadUrl(SITE + BuildConfig.SAYFA + hedef(getIntent()));
+        String dis = disAdres(getIntent());
+        w.loadUrl(dis != null ? dis : SITE + BuildConfig.SAYFA + hedef(getIntent()));
         if (BuildConfig.MAGAZA && Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
             requestPermissions(new String[]{ Manifest.permission.POST_NOTIFICATIONS }, BILDIRIM);
         if (BuildConfig.MAGAZA) Denetci.planla(this);   // güncelleme bildirimleri yalnızca mağazada
     }
 
+    /** https://azataslan065-png.github.io/uygulama-merkezi/?d=KOD (davet bağlantısı) ya da uygulamamerkezi://davet/KOD → yüklenecek tam adres */
+    private static String disAdres(Intent i) {
+        Uri u = i == null ? null : i.getData();
+        if (u == null || !BuildConfig.MAGAZA) return null;
+        if ("https".equals(u.getScheme()) && EV.equals(u.getHost()) && u.getPath() != null && u.getPath().startsWith(YOL.substring(0, YOL.length() - 1))) {
+            String s = u.toString(); return s.contains("/admin.html") ? null : s;
+        }
+        if ("uygulamamerkezi".equals(u.getScheme()) && "davet".equals(u.getHost())) {
+            String kod = u.getLastPathSegment();
+            if (kod != null && kod.matches("[a-z0-9-]{4,40}")) return SITE + "?d=" + kod;
+        }
+        return null;
+    }
     /** uygulamamerkezi://paket/com.azat.haykir → "#/paket/com.azat.haykir"; uygulamamerkezi://app/haykir → "#/app/haykir" */
     private static String hedef(Intent i) {
         Uri u = i == null ? null : i.getData();
@@ -88,6 +102,8 @@ public class Ana extends Activity {
 
     @Override protected void onNewIntent(Intent i) {
         super.onNewIntent(i); setIntent(i);
+        String dis = disAdres(i);
+        if (dis != null) { w.loadUrl(dis); return; }
         String h = hedef(i);
         if (h.isEmpty()) return;
         if (yuklendi) w.evaluateJavascript("location.hash=" + JSONObject.quote(h), null); else w.loadUrl(SITE + BuildConfig.SAYFA + h);
