@@ -78,7 +78,14 @@ public class Ana extends Activity {
             @Override public boolean onShowFileChooser(WebView v, ValueCallback<Uri[]> geri, FileChooserParams p) {
                 if (dosyaGeri != null) dosyaGeri.onReceiveValue(null);
                 dosyaGeri = geri;
-                try { startActivityForResult(p.createIntent(), DOSYA); } catch (Exception e) { dosyaGeri = null; return false; }
+                /* (2026-11-21) KÖK SEBEP ("fotoğraf seçince hiçbir şey olmuyor"): hazır p.createIntent() + parseResult() yalnızca tek dosyalık
+                   cevabı (getData) okuyor; galeri seçimi liste (ClipData) olarak döndürünce sonuç boş kalıyor, sayfa dosya almıyordu.
+                   Seçici burada kurulur, cevaptaki tüm dosyalar (getData + ClipData) sayfaya verilir. */
+                String[] tur = p.getAcceptTypes(); String t0 = (tur != null && tur.length > 0 && tur[0] != null && !tur[0].isEmpty()) ? tur[0] : "*/*";
+                Intent sec = new Intent(Intent.ACTION_GET_CONTENT).addCategory(Intent.CATEGORY_OPENABLE).setType(t0);
+                if (tur != null && tur.length > 1) sec.putExtra(Intent.EXTRA_MIME_TYPES, tur);
+                if (p.getMode() == FileChooserParams.MODE_OPEN_MULTIPLE) sec.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+                try { startActivityForResult(Intent.createChooser(sec, null), DOSYA); } catch (Exception e) { dosyaGeri = null; return false; }
                 return true;
             }
         });
@@ -162,7 +169,16 @@ public class Ana extends Activity {
 
     @Override protected void onActivityResult(int kod, int sonuc, Intent veri) {
         super.onActivityResult(kod, sonuc, veri);
-        if (kod == DOSYA && dosyaGeri != null) { dosyaGeri.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(sonuc, veri)); dosyaGeri = null; }
+        if (kod == DOSYA && dosyaGeri != null) {
+            Uri[] secilen = null;
+            if (sonuc == RESULT_OK && veri != null) {
+                java.util.ArrayList<Uri> l = new java.util.ArrayList<>();
+                if (veri.getClipData() != null) for (int i = 0; i < veri.getClipData().getItemCount(); i++) { Uri u = veri.getClipData().getItemAt(i).getUri(); if (u != null) l.add(u); }
+                if (l.isEmpty() && veri.getData() != null) l.add(veri.getData());
+                if (!l.isEmpty()) secilen = l.toArray(new Uri[0]);
+            }
+            dosyaGeri.onReceiveValue(secilen); dosyaGeri = null;
+        }
     }
 
     @Override protected void onResume() {

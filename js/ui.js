@@ -59,7 +59,7 @@
   /* görseli küçült (canvas) → data URL */
   function readImage(file, { maxW, maxH, type = "image/jpeg", q = .82, square = false }) {
     return new Promise((res, rej) => {
-      if (!file || !/^image\//.test(file.type)) return rej(new Error("Lütfen bir görsel dosyası seç."));
+      if (!file || (file.type && !/^image\//.test(file.type))) return rej(new Error("Lütfen bir görsel dosyası seç."));   // tür boşsa (bazı Android seçicileri) yine de açmayı dene
       if (file.size > 15 * 1048576) return rej(new Error("Görsel 15 MB'tan büyük olamaz."));
       const url = URL.createObjectURL(file); const img = new Image();
       img.onload = () => {

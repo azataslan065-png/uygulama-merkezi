@@ -448,7 +448,7 @@
     });
     $("[data-video]", f).addEventListener("change", async (e) => {
       const file = e.target.files[0]; e.target.value = ""; if (!file) return;
-      if (!/^video\//.test(file.type)) return alertErr("Video değil", "Lütfen bir video dosyası seç.");
+      if (file.type && !/^video\//.test(file.type)) return alertErr("Video değil", "Lütfen bir video dosyası seç.");
       if (file.size > 25 * 1048576) return alertErr("Video çok büyük", `Seçilen video ${fmtSize(file.size)}. En fazla 25 MB olabilir; kısaltıp ya da sıkıştırıp tekrar dene.`);
       const vid = existing ? existing.id : slug(F.id.value || F.name.value);
       if (!vid) return alertErr("Önce ad yaz", "Video uygulamanın klasörüne yüklenir; önce uygulama adını yaz.");
