@@ -71,7 +71,7 @@ public class Ana extends Activity {
             }
         });
         w.loadUrl(SITE + BuildConfig.SAYFA + hedef(getIntent()));
-        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
+        if (BuildConfig.MAGAZA && Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
             requestPermissions(new String[]{ Manifest.permission.POST_NOTIFICATIONS }, BILDIRIM);
         if (BuildConfig.MAGAZA) Denetci.planla(this);   // güncelleme bildirimleri yalnızca mağazada
     }
