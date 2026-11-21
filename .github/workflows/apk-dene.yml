@@ -1,5 +1,5 @@
 # Mağaza uygulamasını emülatörde dener: kurar, açar, derin bağlantıyı (uygulamamerkezi://paket/...) dener, ekran görüntüsü alır.
-# (2026-11-21) Yönetim uygulaması da denenir.
+# (2026-11-21) Yönetim uygulaması da denenir (bildirim izni sorulmamalı).
 # Sonuç "apk-dene" dalına yazılır. Yayına bir şey yüklemez.
 name: APK dene
 on:
