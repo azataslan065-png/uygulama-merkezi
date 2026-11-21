@@ -62,6 +62,7 @@
 
   /* ---------- GitHub (görseller, sürüm dosyası, sürüm bilgileri) ---------- */
   const TOKEN_KEY = "um.admin.ghToken";
+  const NO_WRITE = "GitHub anahtarının uygulama-merkezi deposuna yazma izni yok. GitHub → Settings → Developer settings → Fine-grained tokens → anahtarı aç → Edit: Repository access = Only select repositories → uygulama-merkezi; Permissions → Repositories → Contents = Read and write → Update. Anahtar aynı kalır, panele yeniden yapıştırman gerekmez.";
   const GitHub = {
     get token() { return LS.get(TOKEN_KEY, ""); },
     set token(v) { v ? LS.set(TOKEN_KEY, v) : LS.del(TOKEN_KEY); },
@@ -76,7 +77,12 @@
       if (r.status === 404) throw new Error("Depo bulunamadı ya da anahtarın bu depoya erişimi yok.");
       if (!r.ok) throw new Error("GitHub cevap vermedi (" + r.status + ").");
       const j = await r.json();
-      if (j.permissions && !j.permissions.push) throw new Error("Anahtarın bu depoya yazma izni yok (Contents: Read and write gerekli).");
+      if (j.permissions && !j.permissions.push) throw new Error(NO_WRITE);
+      /* (2026-11-21) KÖK SEBEP: ince taneli anahtarlarda yukarıdaki "push" kullanıcının iznidir, anahtarınki değil; salt okunur
+         anahtar testi geçiyor, yükleme sonra "Resource not accessible" ile düşüyordu. Şimdi gerçek yazma denenir: içeriksiz bir
+         yazma isteği izin varsa 422 (eksik alan), yoksa 403 döner. Depoda hiçbir şey değişmez. */
+      const w = await this.api("/contents/.um-yazma-denemesi", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: "deneme" }) });
+      if (w.status === 403 || w.status === 401) throw new Error(NO_WRITE);
       return j;
     },
     async sha(path) {
@@ -89,7 +95,7 @@
       const sha = await this.sha(path);
       const r = await this.api(`/contents/${path}`, { method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify(Object.assign({ message, content: b64, branch: C.repo.branch }, sha ? { sha } : {})) });
-      if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(`${path} yazılamadı: ${j.message || r.status}`); }
+      if (!r.ok) { const j = await r.json().catch(() => ({})); if (r.status === 403 || /not accessible/i.test(j.message || "")) throw new Error(NO_WRITE); throw new Error(`${path} yazılamadı: ${j.message || r.status}`); }
       return r.json();
     }
   };
