@@ -213,7 +213,7 @@
         <p>${st.tagline || "Sadece davetlilere özel uygulama mağazası."}</p>
         <div class="stats"><div class="stat"><b>${apps.length}</b><span>uygulama</span></div><div class="stat"><b id="totalDl">${fmtNum(totalDl)}</b><span>indirme</span></div><div class="stat"><b>${st.updatedAt ? ago(st.updatedAt) : "—"}</b><span>son güncelleme</span></div></div>
       </section>`}
-      ${!Y && !favOnly ? html`<div class="note" style="margin-top:14px;background:rgba(124,92,255,.1);border:1px solid rgba(124,92,255,.3);display:flex;gap:12px;align-items:center;flex-wrap:wrap"><div style="flex:1 1 200px"><b>Uygulama Merkezi uygulamasında aç</b><br><span style="color:var(--mut);font-size:13px">Uygulamaları uyarısız, tek dokunuşla kur ve güncelle. Uygulama yoksa önce indirilir.</span></div><a class="btn primary sm" href="${appLink()}" rel="noopener">${raw(I.open)}Uygulamada aç</a></div>` : ""}
+      ${!Y && !favOnly ? html`<div class="note" style="margin-top:14px;background:rgba(124,92,255,.1);border:1px solid rgba(124,92,255,.3);display:flex;gap:12px;align-items:center;flex-wrap:wrap"><div style="flex:1 1 200px"><b>Uygulama Merkezi uygulamasında aç</b></div><a class="btn primary sm" href="${appLink()}" rel="noopener">${raw(I.open)}Uygulamada aç</a></div>` : ""}
       <div class="search">${raw(I.search)}<input id="q" type="search" placeholder="Uygulama ara…" value="${state.q}" autocomplete="off" enterkeyhint="search" aria-label="Uygulama ara">${state.q ? raw(`<button class="clear" id="qClear" aria-label="Temizle">${I.x}</button>`) : ""}</div>
       ${cats.length > 2 || state.cat !== "Tümü" ? html`<div class="chips" role="tablist">${cats.map((c) => html`<button class="chip ${c === state.cat ? "on" : ""}" data-cat="${c}">${c}<span class="n">${c === "Tümü" ? apps.length : apps.filter((a) => a.category === c).length}</span></button>`)}</div>` : ""}
       ${showExtras && featured ? html`<section class="sec"><a class="feature" href="#/app/${encodeURIComponent(featured.id)}"><img src="${featured.cover}" alt="" decoding="async"><div class="fbody">${appIcon(featured)}<div><span class="tag">Öne çıkan</span><h3>${featured.name}</h3><p>${featured.short}</p></div></div></a></section>` : ""}
@@ -260,10 +260,8 @@
         <div><b data-dl="${a.id}">${web ? "—" : fmtNum(downloadsOf(a))}</b><span>indirme</span></div>
       </div>
       <div class="d-cta" data-cta="detail" data-id="${a.id}">${raw(ctaHtml(a, "detail"))}</div>
-      ${upd ? html`<div class="note warn" style="margin-top:12px">Yeni sürüm v${a.version} hazır. ${Y ? "“Güncelle”ye dokun; uygulamanın içinden güncellenmez, burada güncellenir." : ""}</div>` : ""}
-      ${web ? html`<p class="help" style="margin:10px 2px 0;color:var(--mut);font-size:13px">İpucu: Açtıktan sonra tarayıcı menüsünden “Ana ekrana ekle”yi seçersen uygulama gibi açılır.</p>` : ""}
       ${b ? html`<div class="beta-box"><b>🧪 Test sürümü v${b.version}</b><span class="badge beta" style="margin-left:6px">SADECE TESTÇİLER</span>
-          <p>Henüz herkese açılmadı; hatalar olabilir. ${fmtDate(b.updated)}</p>
+          <p>${fmtDate(b.updated)}</p>
           ${b.notes.length ? html`<ul style="margin:0 0 10px;padding-left:18px;font-size:13.5px">${b.notes.map((n) => html`<li>${n}</li>`)}</ul>` : ""}
           <button class="btn ghost block" id="betaDl">${raw(b.webUrl ? I.open : I.dl)}Test sürümünü ${b.webUrl ? "aç" : "indir"}</button></div>` : ""}
       ${a.whatsNew.length ? html`<section class="block"><div class="whats"><b>Bu sürümde yenilikler</b> <small style="color:var(--mut)">· ${fmtDate(a.updated)}</small><ul>${a.whatsNew.map((x) => html`<li>${x}</li>`)}</ul></div></section>` : ""}
@@ -273,7 +271,7 @@
       <section class="block"><h2>Hakkında</h2><p class="lead">${a.description || a.short}</p></section>
       ${a.features.length ? html`<section class="block"><h2>Özellikler</h2><ul class="feat-list">${a.features.map((f) => html`<li>${f}</li>`)}</ul></section>` : ""}
       <section class="block" id="reviewsBlock"><h2>Puan ve yorumlar</h2><div id="reviews"><div class="sk" style="height:90px;border-radius:22px"></div></div></section>
-      ${a.changelog.length ? html`<section class="block"><h2>Sürüm geçmişi</h2>${old.length ? html`<p class="help" style="margin:-6px 0 12px;color:var(--mut);font-size:13px">Yeni sürümde sorun yaşarsan eski bir sürümü indirebilirsin.</p>` : ""}<div class="timeline">${a.changelog.map((c, i) => html`<div class="tl"><b>v${c.version}</b><small>${fmtDate(c.date)}</small>${c.notes.length ? html`<ul>${c.notes.map((n) => html`<li>${n}</li>`)}</ul>` : ""}${c.url && c.url !== cur && c.version !== a.version ? html`<button class="old" data-old="${i}">${raw(I.dl)}Bu sürümü indir</button>` : ""}</div>`)}</div></section>` : ""}
+      ${a.changelog.length ? html`<section class="block"><h2>Sürüm geçmişi</h2><div class="timeline">${a.changelog.map((c, i) => html`<div class="tl"><b>v${c.version}</b><small>${fmtDate(c.date)}</small>${c.notes.length ? html`<ul>${c.notes.map((n) => html`<li>${n}</li>`)}</ul>` : ""}${c.url && c.url !== cur && c.version !== a.version ? html`<button class="old" data-old="${i}">${raw(I.dl)}Bu sürümü indir</button>` : ""}</div>`)}</div></section>` : ""}
       ${a.knownIssues.length ? html`<section class="block"><h2>Bilinen hatalar</h2><div class="note warn"><ul>${a.knownIssues.map((k) => html`<li>${k}</li>`)}</ul></div></section>` : ""}
       <section class="block"><h2>Bir sorun mu var?</h2><div class="rowbtns" style="margin-top:0"><button class="btn ghost" id="reportBtn">🐞 Hata bildir</button></div></section>
       ${web ? "" : html`<section class="block"><h2>Sistem gereksinimleri</h2><div class="kv">
