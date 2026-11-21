@@ -354,6 +354,8 @@
       <section class="form-sec glass"><h4><em>2</em>Görseller</h4>
         <div class="field"><span>İkon (kare, en az 256×256)</span><label class="drop"><input type="file" accept="image/*" data-img="icon"><div class="pv" id="pv-icon">${a.icon ? raw(`<img src="${esc(a.icon)}">`) : raw(I.image)}</div><div><b>İkon yükle</b><small>PNG önerilir, kareye kırpılır</small></div></label></div>
         <div class="field"><span>Kapak görseli (2:1, örn. 1200×600)</span><label class="drop wide"><input type="file" accept="image/*" data-img="cover"><div class="pv" id="pv-cover">${a.cover ? raw(`<img src="${esc(a.cover)}">`) : raw(I.image)}</div><div><b>Kapak yükle</b><small>Detay sayfasının üstünde görünür</small></div></label></div>
+        <div class="field"><span>Tanıtım videosu (isteğe bağlı · mağazada ilk sırada görünür)</span><label class="drop"><input type="file" accept="video/*" data-video><div class="pv" id="pv-video">${a.videoPoster ? raw(`<img src="${esc(a.videoPoster)}">`) : raw(I.video)}</div><div><b id="vidTitle">${a.video ? "Videoyu değiştir" : "Video yükle"}</b><small>MP4 önerilir, en fazla 25 MB. Seçince hemen yüklenir.</small></div></label>
+          ${raw(`<button type="button" class="btn danger sm${a.video ? "" : " hidden"}" id="vidDel" style="margin-top:8px">${I.trash}Videoyu kaldır</button>`)}</div>
         <div class="field"><span>Ekran görüntüleri (en fazla 8)</span><label class="drop"><input type="file" accept="image/*" multiple data-img="shots"><div class="pv">${raw(I.upload)}</div><div><b>Ekran görüntüsü ekle</b><small>Birden fazla seçebilirsin</small></div></label><div class="thumbs" id="thumbs"></div></div>
       </section>
 
@@ -433,6 +435,29 @@
         loading(false); toast("Görsel eklendi", "ok", 1400);
       } catch (e) { loading(false); alertErr("Görsel eklenemedi", e.message); }
     }));
+    // tanıtım videosu: kapak karesi çıkarılır, dosya hemen GitHub'a yüklenir
+    const posterOf = (file) => new Promise((res) => {
+      const v = document.createElement("video"), url = URL.createObjectURL(file); v.muted = true; v.playsInline = true; v.preload = "auto"; v.src = url;
+      const done = (x) => { URL.revokeObjectURL(url); res(x); };
+      v.onloadeddata = () => { v.currentTime = Math.min(1, (v.duration || 2) / 3); };
+      v.onseeked = () => { try { const sc = Math.min(1, 1080 / Math.max(v.videoWidth, v.videoHeight)); const c = document.createElement("canvas"); c.width = Math.round(v.videoWidth * sc); c.height = Math.round(v.videoHeight * sc); c.getContext("2d").drawImage(v, 0, 0, c.width, c.height); done(c.toDataURL("image/jpeg", .8)); } catch { done(""); } };
+      v.onerror = () => done(""); setTimeout(() => done(""), 8000);
+    });
+    $("[data-video]", f).addEventListener("change", async (e) => {
+      const file = e.target.files[0]; e.target.value = ""; if (!file) return;
+      if (!/^video\//.test(file.type)) return alertErr("Video değil", "Lütfen bir video dosyası seç.");
+      if (file.size > 25 * 1048576) return alertErr("Video çok büyük", `Seçilen video ${fmtSize(file.size)}. En fazla 25 MB olabilir; kısaltıp ya da sıkıştırıp tekrar dene.`);
+      const vid = existing ? existing.id : slug(F.id.value || F.name.value);
+      if (!vid) return alertErr("Önce ad yaz", "Video uygulamanın klasörüne yüklenir; önce uygulama adını yaz.");
+      try {
+        loading(true, "Video hazırlanıyor…"); const poster = await posterOf(file);
+        loading(true, `Video yükleniyor (${fmtSize(file.size)})…`); a.video = await D.uploadVideo(vid, file); a.videoPoster = poster;
+        loading(false);
+        $("#pv-video").innerHTML = poster ? `<img src="${poster}">` : I.video; $("#vidTitle").textContent = "Videoyu değiştir"; $("#vidDel").classList.remove("hidden");
+        toast("Video yüklendi · kaydetmeyi unutma", "ok", 3000);
+      } catch (err) { loading(false); alertErr("Video yüklenemedi", err.message); }
+    });
+    $("#vidDel").onclick = () => { a.video = ""; a.videoPoster = ""; $("#pv-video").innerHTML = I.video; $("#vidTitle").textContent = "Video yükle"; $("#vidDel").classList.add("hidden"); toast("Video kaldırıldı · kaydet", "info"); };
     // sürüm geçmişi
     const drawCl = () => { $("#clList").innerHTML = a.changelog.length ? a.changelog.map((c, i) => `<div class="cl-item"><div><b>v${esc(c.version)}</b> <small style="color:var(--mut)">${esc(fmtDate(c.date))}</small>${c.url ? ' <span class="badge web">DOSYA</span>' : ""}<br>${c.notes.map(esc).join(" · ") || "<i style='color:var(--mut)'>not yok</i>"}</div><button type="button" class="icon-btn" style="width:34px;height:34px;flex:none" data-cl="${i}" aria-label="Sil">${I.trash}</button></div>`).join("") : '<p class="help" style="margin:0 0 10px">Henüz kayıt yok.</p>';
       $$("[data-cl]").forEach((x) => x.onclick = () => { a.changelog.splice(+x.dataset.cl, 1); drawCl(); }); };

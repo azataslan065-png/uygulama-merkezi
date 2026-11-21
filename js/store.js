@@ -44,6 +44,21 @@
     return "ac";
   }
   const hasUpdate = (a) => { if (a.kind === "web") return false; const s = status(a); if (s) return s === "guncelle"; const v = D.user.installed()[a.id]; return !!(v && v !== a.version); };
+  const canRemove = () => !!(Y && typeof Y.kaldir === "function");
+  const isInstalled = (a) => { const s = status(a); return s === "ac" || s === "guncelle"; };
+  /* Kart ve detay düğmeleri: kurulu değil → Yükle; kurulu → Aç + Kaldır; güncelleme var → Güncelle + Kaldır */
+  function ctaHtml(a, kind) {
+    const ac = action(a), xl = kind === "detail" ? " xl" : "", id = UI.esc(a.id);
+    const label = kind === "detail" && isWeb(a) ? "Uygulamayı aç" : ac.label;
+    const main = `<button class="btn primary${xl}${ac.busy ? " busy" : ""}" data-act="dl" data-id="${id}">${ac.icon}<span>${UI.esc(label)}</span></button>`;
+    const rm = !ac.busy && canRemove() && !isWeb(a) && isInstalled(a) ? `<button class="btn ghost${xl}" data-act="kaldir" data-id="${id}">${I.trash}<span>Kaldır</span></button>` : "";
+    if (kind === "card") return (rm || `<a class="btn ghost" href="#/app/${encodeURIComponent(a.id)}">Detaylar</a>`) + main;
+    return main + rm;
+  }
+  async function uninstall(a) {
+    if (!(await UI.confirmDlg(a.name + " kaldırılsın mı?", "Uygulama telefondan silinir. İstediğin zaman buradan yeniden yükleyebilirsin.", "Kaldır", true))) return;
+    try { Y.kaldir(a.paket); } catch { alertErr("Kaldırılamadı", "Mağaza uygulamasını güncelleyip tekrar dene."); }
+  }
   function action(a) {
     if (a.kind === "web") return { label: "Aç", icon: I.open };
     if (state.busy[a.id] != null) return { label: state.busy[a.id], icon: I.dl, busy: true };
@@ -83,15 +98,12 @@
         <div class="spec"><span>İndirme</span><b data-dl="${a.id}">${isWeb(a) ? "—" : fmtNum(downloadsOf(a))}</b></div>
         <div class="spec"><span>Kategori</span><b>${a.category || "—"}</b></div>
       </div>
-      <div class="actions">
-        <a class="btn ghost" href="#/app/${encodeURIComponent(a.id)}">Detaylar</a>
-        <button class="btn primary" data-dl-btn="${a.id}">${raw(action(a).icon)}<span>${action(a).label}</span></button>
-      </div>
+      <div class="actions" data-cta="card" data-id="${a.id}">${raw(ctaHtml(a, "card"))}</div>
     </article>`.s;
   }
   function bindCards(root) {
     $$("[data-fav]", root).forEach((b) => b.onclick = (e) => { e.preventDefault(); const on = D.user.toggleFav(b.dataset.fav); b.classList.toggle("on", on); b.innerHTML = on ? I.star : I.starO; toast(on ? "Favorilere eklendi" : "Favorilerden çıkarıldı", on ? "ok" : "info", 1600); if (location.hash.startsWith("#/favoriler")) render(); });
-    $$("[data-dl-btn]", root).forEach((b) => b.onclick = () => download(byId(b.dataset.dlBtn)));
+    /* düğmeler belge düzeyinde dinlenir (bkz. data-act) */
   }
 
   /* ---------- indirme / açma ---------- */
@@ -121,8 +133,16 @@
     setTimeout(() => refreshStats(a, true), 4000);
   }
 
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-act]"); if (!b || !state.db) return;
+    const a = byId(b.dataset.id); if (!a) return;
+    e.preventDefault();
+    if (b.dataset.act === "kaldir") uninstall(a); else download(a);
+  });
+
   /* ---------- mağaza uygulamasından gelen olaylar ---------- */
   function refreshButtons(only) {
+    $$("[data-cta]").forEach((c) => { const id = c.dataset.id; if (only && id !== only) return; const a = byId(id); if (a) c.innerHTML = ctaHtml(a, c.dataset.cta); });
     $$("[data-dl-btn]").forEach((b) => {
       const id = b.dataset.dlBtn; if (only && id !== only) return;
       const a = byId(id); if (!a || a.kind === "web") return;
@@ -226,10 +246,12 @@
     if (!a) { view.innerHTML = html`<div class="view"><div class="empty glass" style="margin-top:24px"><div class="em">🫥</div><h3>Uygulama bulunamadı</h3><p>Kaldırılmış ya da gizlenmiş olabilir.</p><a class="btn ghost" style="margin-top:16px" href="#/">Mağazaya dön</a></div></div>`.s; return; }
     const fav = D.user.favs().includes(a.id), upd = hasUpdate(a), r = a.requirements, b = betaOf(a), web = isWeb(a);
     const cur = web ? a.webUrl : a.apkUrl;
+    const media = [...(a.video ? [{ type: "video", src: a.video, poster: a.videoPoster }] : []), ...a.screenshots.map((s) => ({ type: "img", src: s }))];
     const old = a.changelog.filter((c) => c.url && c.url !== cur && c.version !== a.version);
     view.innerHTML = html`<div class="view">
       <div class="d-cover">${a.cover ? html`<img src="${a.cover}" alt="" decoding="async">` : html`<div style="width:100%;height:100%;background:linear-gradient(135deg,${a.accent},#07070c)"></div>`}
-        <button class="icon-btn back" id="backBtn" aria-label="Geri">${raw(I.back)}</button></div>
+        <button class="icon-btn back" id="backBtn" aria-label="Geri">${raw(I.back)}</button>
+        <div class="cover-acts"><button class="icon-btn ${fav ? "on" : ""}" id="favBig" aria-label="Favori">${raw(fav ? I.star : I.starO)}</button><button class="icon-btn" id="shareBig" aria-label="Paylaş">${raw(I.share)}</button></div></div>
       <div class="d-head">${appIcon(a)}<div style="min-width:0"><h1>${a.name}</h1><div class="cat">${a.category || "Genel"} · v${a.version}${web ? " · Web" : ""}</div></div></div>
       <div class="d-stats glass">
         <div><b>${a.version}</b><span>sürüm</span></div>
@@ -237,11 +259,7 @@
         <div><b id="rateStat">—</b><span>puan</span></div>
         <div><b data-dl="${a.id}">${web ? "—" : fmtNum(downloadsOf(a))}</b><span>indirme</span></div>
       </div>
-      <div class="d-cta">
-        <button class="btn primary xl" id="dlBig" data-dl-btn="${a.id}">${raw(action(a).icon)}<span>${web ? "Uygulamayı aç" : action(a).label}</span></button>
-        <button class="icon-btn ${fav ? "on" : ""}" id="favBig" aria-label="Favori">${raw(fav ? I.star : I.starO)}</button>
-        <button class="icon-btn" id="shareBig" aria-label="Paylaş">${raw(I.share)}</button>
-      </div>
+      <div class="d-cta" data-cta="detail" data-id="${a.id}">${raw(ctaHtml(a, "detail"))}</div>
       ${upd ? html`<div class="note warn" style="margin-top:12px">Yeni sürüm v${a.version} hazır. ${Y ? "“Güncelle”ye dokun; uygulamanın içinden güncellenmez, burada güncellenir." : ""}</div>` : ""}
       ${web ? html`<p class="help" style="margin:10px 2px 0;color:var(--mut);font-size:13px">İpucu: Açtıktan sonra tarayıcı menüsünden “Ana ekrana ekle”yi seçersen uygulama gibi açılır.</p>` : ""}
       ${b ? html`<div class="beta-box"><b>🧪 Test sürümü v${b.version}</b><span class="badge beta" style="margin-left:6px">SADECE TESTÇİLER</span>
@@ -249,7 +267,9 @@
           ${b.notes.length ? html`<ul style="margin:0 0 10px;padding-left:18px;font-size:13.5px">${b.notes.map((n) => html`<li>${n}</li>`)}</ul>` : ""}
           <button class="btn ghost block" id="betaDl">${raw(b.webUrl ? I.open : I.dl)}Test sürümünü ${b.webUrl ? "aç" : "indir"}</button></div>` : ""}
       ${a.whatsNew.length ? html`<section class="block"><div class="whats"><b>Bu sürümde yenilikler</b> <small style="color:var(--mut)">· ${fmtDate(a.updated)}</small><ul>${a.whatsNew.map((x) => html`<li>${x}</li>`)}</ul></div></section>` : ""}
-      ${a.screenshots.length ? html`<section class="block"><h2>Ekran görüntüleri</h2><div class="gallery">${a.screenshots.map((s, i) => html`<button data-shot="${i}"><img src="${s}" alt="Ekran görüntüsü ${i + 1}" loading="lazy" decoding="async"></button>`)}</div></section>` : ""}
+      ${media.length ? html`<section class="block"><h2>${a.video ? "Video ve ekran görüntüleri" : "Ekran görüntüleri"}</h2><div class="gallery">${media.map((m, i) => m.type === "video"
+        ? html`<button data-shot="${i}" class="vid" aria-label="Videoyu oynat">${m.poster ? html`<img src="${m.poster}" alt="" loading="lazy" decoding="async">` : html`<video src="${m.src}#t=0.5" preload="metadata" muted playsinline></video>`}<span class="play">${raw(I.play)}</span></button>`
+        : html`<button data-shot="${i}"><img src="${m.src}" alt="Ekran görüntüsü ${i}" loading="lazy" decoding="async"></button>`)}</div></section>` : ""}
       <section class="block"><h2>Hakkında</h2><p class="lead">${a.description || a.short}</p></section>
       ${a.features.length ? html`<section class="block"><h2>Özellikler</h2><ul class="feat-list">${a.features.map((f) => html`<li>${f}</li>`)}</ul></section>` : ""}
       <section class="block" id="reviewsBlock"><h2>Puan ve yorumlar</h2><div id="reviews"><div class="sk" style="height:90px;border-radius:22px"></div></div></section>
@@ -265,13 +285,13 @@
       <section class="block" style="margin-bottom:12px"><button class="btn primary xl block" id="dlBottom" data-dl-btn="${a.id}" data-long="1">${raw(action(a).icon)}<span>${web ? a.name + " aç" : action(a).label === "Aç" ? a.name + " aç" : a.name + " · " + action(a).label.toLocaleLowerCase("tr") + " · " + sizeOf(a)}</span></button></section>
     </div>`.s;
     $("#backBtn").onclick = () => (history.length > 1 ? history.back() : (location.hash = "#/"));
-    $("#dlBig").onclick = $("#dlBottom").onclick = () => download(a);   // (data-dl-btn yalnızca durum yazısı için)
+    $("#dlBottom").onclick = () => download(a);
     if (b) $("#betaDl").onclick = () => download(a, { url: b.webUrl || b.apkUrl, version: b.version, beta: true });
     $$("[data-old]").forEach((x) => x.onclick = () => { const c = a.changelog[+x.dataset.old]; download(a, { url: c.url, version: c.version, old: true }); });
     $("#favBig").onclick = (e) => { const on = D.user.toggleFav(a.id); const bt = e.currentTarget; bt.classList.toggle("on", on); bt.innerHTML = on ? I.star : I.starO; toast(on ? "Favorilere eklendi" : "Favorilerden çıkarıldı", on ? "ok" : "info", 1600); };
     $("#shareBig").onclick = () => shareSheet(a.name, appUrl(a));
     $("#reportBtn").onclick = () => reportDialog(a);
-    $$("[data-shot]").forEach((x) => x.onclick = () => lightbox(a.screenshots, +x.dataset.shot));
+    $$("[data-shot]").forEach((x) => x.onclick = () => lightbox(media, +x.dataset.shot));
     refreshStats(a);
     loadReviews(a);
     scrollTo(0, 0);
@@ -332,7 +352,7 @@
 
   function lightbox(list, i) {
     const lb = document.createElement("div"); lb.className = "lightbox";
-    const draw = () => { lb.innerHTML = `<img src="${UI.esc(list[i])}" alt=""><button class="icon-btn" data-x aria-label="Kapat">${I.x}</button>${list.length > 1 ? `<button class="icon-btn nav l" data-p>${I.back}</button><button class="icon-btn nav r" data-n style="transform:translateY(-50%) rotate(180deg)">${I.back}</button>` : ""}`; };
+    const draw = () => { const m = list[i]; lb.innerHTML = (m.type === "video" ? `<video src="${UI.esc(m.src)}" controls autoplay playsinline${m.poster ? ` poster="${UI.esc(m.poster)}"` : ""}></video>` : `<img src="${UI.esc(m.src)}" alt="">`) + `<button class="icon-btn" data-x aria-label="Kapat">${I.x}</button>${list.length > 1 ? `<button class="icon-btn nav l" data-p>${I.back}</button><button class="icon-btn nav r" data-n style="transform:translateY(-50%) rotate(180deg)">${I.back}</button>` : ""}`; };
     draw(); document.body.append(lb);
     lb.addEventListener("click", (e) => { const t = e.target.closest("button"); if (!t) { if (e.target === lb) lb.remove(); return; }
       if (t.hasAttribute("data-x")) lb.remove(); if (t.hasAttribute("data-p")) { i = (i - 1 + list.length) % list.length; draw(); } if (t.hasAttribute("data-n")) { i = (i + 1) % list.length; draw(); } });

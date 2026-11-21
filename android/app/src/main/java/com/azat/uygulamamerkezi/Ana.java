@@ -63,6 +63,18 @@ public class Ana extends Activity {
             @Override public void onPageFinished(WebView v, String url) { yuklendi = true; }
         });
         w.setWebChromeClient(new WebChromeClient() {
+            // Video tam ekran (tanıtım videoları)
+            private View tam; private CustomViewCallback tamGeri;
+            @Override public void onShowCustomView(View v, CustomViewCallback g) {
+                if (tam != null) { g.onCustomViewHidden(); return; }
+                tam = v; tamGeri = g;
+                ((android.widget.FrameLayout) getWindow().getDecorView()).addView(v, new android.widget.FrameLayout.LayoutParams(-1, -1));
+            }
+            @Override public void onHideCustomView() {
+                if (tam == null) return;
+                ((android.widget.FrameLayout) getWindow().getDecorView()).removeView(tam); tam = null;
+                if (tamGeri != null) tamGeri.onCustomViewHidden(); tamGeri = null;
+            }
             @Override public boolean onShowFileChooser(WebView v, ValueCallback<Uri[]> geri, FileChooserParams p) {
                 if (dosyaGeri != null) dosyaGeri.onReceiveValue(null);
                 dosyaGeri = geri;
@@ -130,6 +142,14 @@ public class Ana extends Activity {
                     return;
                 }
                 Kurucu.kur(getApplicationContext(), id, url);
+            });
+        }
+        /** Uygulamayı kaldır: Android'in kaldırma onayı açılır; dönünce sayfa düğmeleri yenilenir (bkz. onResume "odak"). */
+        @JavascriptInterface public void kaldir(final String paket) {
+            runOnUiThread(() -> {
+                if (paket == null || paket.isEmpty() || paket.equals(getPackageName())) return;
+                try { startActivity(new Intent(Intent.ACTION_DELETE, Uri.parse("package:" + paket))); }
+                catch (Exception e) { Kurucu.gonder("bitti", "", "Kaldırma ekranı açılamadı."); }
             });
         }
         /** Kurulu uygulamayı aç. */

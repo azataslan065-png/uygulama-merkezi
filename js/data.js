@@ -32,7 +32,8 @@
       id: a.id, name: a.name || "", short: a.short || "", description: a.description || "",
       kind: a.kind === "web" ? "web" : "apk", webUrl: a.webUrl || "", ghRepo: a.ghRepo || "",
       paket: String(a.paket || "").trim(), apkMs: +a.apkMs || 0,
-      features: list(a.features), category: a.category || "", version: String(a.version || "1.0"),
+      features: list(a.features), category: a.category || "", version: String(a.version || "1.0").trim().replace(/^v(?=\d)/i, ""),
+      video: a.video || "", videoPoster: a.videoPoster || "",
       updated: a.updated || today(), created: a.created || a.updated || today(),
       size: a.size || "", minAndroid: a.minAndroid || "", downloads: +a.downloads || 0, apkUrl: a.apkUrl || "",
       icon: a.icon || "", cover: a.cover || "", screenshots: arr(a.screenshots).filter(Boolean),
@@ -93,6 +94,16 @@
     }
   };
 
+  /* Tanıtım videosu hemen GitHub'a yüklenir (taslağa sığmaz); dönen yol katalogda saklanır */
+  async function uploadVideo(appId, file) {
+    if (!GitHub.token) throw new Error("Video yüklemek için önce Ayarlar'dan GitHub erişim anahtarını gir.");
+    const ext = (file.name.match(/\.(mp4|webm|mov|m4v)$/i) || [, "mp4"])[1].toLowerCase();
+    const rnd = [...crypto.getRandomValues(new Uint8Array(6))].map((b) => b.toString(16).padStart(2, "0")).join("");
+    const path = `${C.assetsDir}/${appId}/video-${rnd}.${ext}`;
+    await GitHub.put(path, await b64FromBlob(file), `Video: ${appId}`);
+    return path;
+  }
+
   /* ---------- okuma ---------- */
   const CACHE_KEY = "um.cache.catalog";
   async function loadCatalog() {
@@ -133,6 +144,7 @@
       const add = (getter, setter, name) => { const v = getter(); if (typeof v === "string" && v.startsWith("data:")) jobs.push({ a, v, setter, name }); };
       add(() => a.icon, (p) => (a.icon = p), "icon");
       add(() => a.cover, (p) => (a.cover = p), "cover");
+      add(() => a.videoPoster, (p) => (a.videoPoster = p), "poster");
       a.screenshots.forEach((s, i) => add(() => s, (p) => (a.screenshots[i] = p), "shot" + (i + 1)));
     });
     if (jobs.length && !GitHub.token) throw new Error("Yeni görselleri yüklemek için Ayarlar'dan GitHub erişim anahtarını gir.");
@@ -270,5 +282,5 @@
     setInboxSeen(t) { LS.set("um.inboxSeen", t); }
   };
 
-  window.UMData = { packagesOf, normalize, normApp, normBeta, linkOf, loadCatalog, loadBeta, draft, publish, changes, GitHub, releases, versionFrom, notesFrom, parseRepo, releaseStats, parseRelease, member, user, LS, arr };
+  window.UMData = { uploadVideo, packagesOf, normalize, normApp, normBeta, linkOf, loadCatalog, loadBeta, draft, publish, changes, GitHub, releases, versionFrom, notesFrom, parseRepo, releaseStats, parseRelease, member, user, LS, arr };
 })();
