@@ -447,6 +447,8 @@
       render();
       if (!inv.owner) D.member.touch(inv);
       loadAllStats(); notifyUpdates(); loadInbox(); setTimeout(storeSelfUpdate, 2500);
+      // Paket adı girilmemiş uygulamalar: tahmin et (kurulu mu / güncel mi anlaşılsın)
+      visibleApps().filter((a) => !a.paket && a.kind !== "web").forEach(async (a) => { const pk = await D.guessPackage(a); if (pk) { a.paket = pk; refreshButtons(a.id); } });
       FB.get("reviews").then((v) => { state.reviews = v || {}; if (!location.hash.startsWith("#/app/") && !location.hash.startsWith("#/bildirimler")) render(); }).catch(() => {});
       if (r.offline) toast("Çevrimdışısın · son kaydedilen liste gösteriliyor", "warn", 3500);
     } catch (e) {
@@ -470,5 +472,10 @@
   }
   boot();
 
-  if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
+  if ("serviceWorker" in navigator && location.protocol === "https:") {
+    // Yeni service worker devraldığında sayfayı bir kez yenile: yeni düzen hemen görünsün
+    const hadController = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadController && !sessionStorage.getItem("um.swReload")) { sessionStorage.setItem("um.swReload", "1"); location.reload(); } });
+    navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then((r) => r.update()).catch(() => {});
+  }
 })();

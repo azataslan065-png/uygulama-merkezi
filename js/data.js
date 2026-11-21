@@ -218,6 +218,19 @@
     try { const r = await fetch(`https://raw.githubusercontent.com/${owner}/${repo}/HEAD/android/app/build.gradle`, { cache: "no-store" }); if (!r.ok) return [];
       return [...new Set([...(await r.text()).matchAll(/applicationId\s*[=(]?\s*['"]([\w.]+)['"]/g)].map((m) => m[1]))]; } catch { return []; }
   }
+  /* Paket adı boşsa tahmin: futbol-ligi'nin bilinen APK'ları, yoksa deponun build.gradle'ındaki tek applicationId */
+  const KNOWN_PKG = { "futbol-ligi/SAHA.apk": "com.azat.saha", "futbol-ligi/Puan-Tablosu.apk": "com.azat.puantablosu", "futbol-ligi/SAHA-Admin.apk": "com.azat.sahaadmin",
+    "futbol-ligi/Puan-Tablosu-Kok.apk": "com.azat.puantablosukok", "futbol-ligi/Admin-Kok.apk": "com.azat.adminkok" };
+  async function guessPackage(a) {
+    if (a.paket || a.kind === "web") return a.paket || "";
+    const p = parseRelease(a.apkUrl); if (!p) return "";
+    const k = KNOWN_PKG[p.repo + "/" + p.file]; if (k) return k;
+    const cache = LS.get("um.pkgGuess", {}), key = p.owner + "/" + p.repo;
+    if (cache[key] !== undefined) return cache[key];
+    const pk = await packagesOf(p.owner, p.repo), v = pk.length === 1 ? pk[0] : "";
+    if (pk.length) { cache[key] = v; LS.set("um.pkgGuess", cache); }
+    return v;
+  }
   // sürüm adından okunabilir numara: "v1.2.0" → "1.2.0"; numarasız etiketlerde ("apk") tarih kullanılır
   function versionFrom(rel) {
     const m = `${rel.name} ${rel.tag}`.match(/v?(\d+(?:\.\d+){0,3}(?:[-.][\w]+)?)/i);
@@ -282,5 +295,5 @@
     setInboxSeen(t) { LS.set("um.inboxSeen", t); }
   };
 
-  window.UMData = { uploadVideo, packagesOf, normalize, normApp, normBeta, linkOf, loadCatalog, loadBeta, draft, publish, changes, GitHub, releases, versionFrom, notesFrom, parseRepo, releaseStats, parseRelease, member, user, LS, arr };
+  window.UMData = { guessPackage, uploadVideo, packagesOf, normalize, normApp, normBeta, linkOf, loadCatalog, loadBeta, draft, publish, changes, GitHub, releases, versionFrom, notesFrom, parseRepo, releaseStats, parseRelease, member, user, LS, arr };
 })();

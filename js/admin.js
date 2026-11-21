@@ -67,6 +67,9 @@
     const meta = D.draft.meta();
     db = meta && meta.dirty ? D.normalize(meta.db) : JSON.parse(JSON.stringify(published));
     refreshDirty();
+    // Paket adı boş olan APK uygulamalarına otomatik paket adı (diğer uygulamaların güncelleme ekranı ve mağazadaki Aç/Kaldır bununla çalışır)
+    Promise.all(db.apps.filter((a) => !a.paket && a.kind !== "web").map(async (a) => { const pk = await D.guessPackage(a); if (pk) { a.paket = pk; return a.name; } }))
+      .then((l) => { l = l.filter(Boolean); if (l.length) { save("Paket adı bulundu: " + l.join(", ")); render(); } });
     loadLive();
     db.apps.forEach(async (a) => { const s = a.kind === "apk" && (await D.releaseStats(a.apkUrl)); if (s) { stats[a.id] = s; if (route() === "panel") panelKpis(); } });
   }
