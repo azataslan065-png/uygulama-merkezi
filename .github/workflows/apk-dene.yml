@@ -1,0 +1,45 @@
+# Mağaza uygulamasını emülatörde dener: kurar, açar, derin bağlantıyı (uygulamamerkezi://paket/...) dener, ekran görüntüsü alır.
+# Sonuç "apk-dene" dalına yazılır. Yayına bir şey yüklemez.
+name: APK dene
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [.github/workflows/apk-dene.yml]
+permissions:
+  contents: write
+jobs:
+  dene:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm
+      - name: APK indir
+        env: { GH_TOKEN: '${{ github.token }}' }
+        run: |
+          mkdir -p /tmp/a && gh release download apk -R ${{ github.repository }} -D /tmp/a
+          gh release download apk -R azataslan065-png/haykir -D /tmp/a && ls -la /tmp/a
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: |
+            mkdir -p /tmp/r; adb logcat -c; adb install -r /tmp/a/Uygulama-Merkezi.apk; adb install -r /tmp/a/Haykir.apk
+            adb shell pm grant com.azat.uygulamamerkezi android.permission.POST_NOTIFICATIONS || true
+            adb shell monkey -p com.azat.uygulamamerkezi -c android.intent.category.LAUNCHER 1 >/dev/null; sleep 30; adb exec-out screencap -p > /tmp/r/1-acilis.png
+            adb shell am start -a android.intent.action.VIEW -d "uygulamamerkezi://paket/com.azat.haykir" >/dev/null; sleep 12; adb exec-out screencap -p > /tmp/r/2-derin-baglanti.png
+            adb shell am start -a android.intent.action.VIEW -d "uygulamamerkezi://paket/com.azat.haykir" -p com.azat.haykir >/dev/null 2>&1 || true
+            adb shell monkey -p com.azat.haykir -c android.intent.category.LAUNCHER 1 >/dev/null; sleep 15; adb exec-out screencap -p > /tmp/r/3-haykir.png
+            adb shell dumpsys package com.azat.uygulamamerkezi | grep -E "versionName|REQUEST_INSTALL|QUERY_ALL" > /tmp/r/paket.txt || true
+            adb logcat -d | grep -iE "chromium|AndroidRuntime|azat|FATAL|console" | tail -400 > /tmp/r/logcat.txt || true
+      - name: Sonucu yaz
+        if: always()
+        run: |
+          cd /tmp/r && git init -q && git checkout -q -b apk-dene && git config user.name github-actions && git config user.email actions@github.com
+          git add -A && git commit -qm "APK dene $(date -u +%FT%TZ)" && git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" apk-dene
