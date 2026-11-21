@@ -25,7 +25,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir out
-          cp android/app/build/outputs/apk/release/*.apk out/Uygulama-Merkezi.apk
+          cp android/app/build/outputs/apk/magaza/release/*.apk out/Uygulama-Merkezi.apk
+          cp android/app/build/outputs/apk/yonetim/release/*.apk out/Uygulama-Merkezi-Yonetim.apk
           ls -la out
           gh release delete apk -y --cleanup-tag 2>/dev/null || true
-          gh release create apk out/Uygulama-Merkezi.apk --title "Uygulama Merkezi APK (derleme $GITHUB_RUN_NUMBER)" --notes "Mağaza uygulaması. Telefona bir kez kur; uygulamalar artık bunun içinden kurulur ve güncellenir." --latest
+          gh release create apk out/Uygulama-Merkezi.apk out/Uygulama-Merkezi-Yonetim.apk --title "Uygulama Merkezi APK (derleme $GITHUB_RUN_NUMBER)" --notes "Uygulama-Merkezi.apk: mağaza (davetliler). Uygulama-Merkezi-Yonetim.apk: yönetim paneli (yalnızca sahip). Telefona bir kez kur; uygulamalar artık bunun içinden kurulur ve güncellenir." --latest

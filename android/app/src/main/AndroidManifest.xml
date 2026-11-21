@@ -15,9 +15,6 @@
         android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode|density|fontScale"
         android:windowSoftInputMode="adjustResize">
       <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>
-      <!-- Diğer uygulamaların güncelleme ekranı buraya yönlendirir: uygulamamerkezi://paket/com.azat.haykir -->
-      <intent-filter><action android:name="android.intent.action.VIEW"/><category android:name="android.intent.category.DEFAULT"/><category android:name="android.intent.category.BROWSABLE"/>
-        <data android:scheme="uygulamamerkezi"/></intent-filter>
     </activity>
     <receiver android:name=".KurulumAlici" android:exported="false"/>
     <receiver android:name=".Acilis" android:exported="false">

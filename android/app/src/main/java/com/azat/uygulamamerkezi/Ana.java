@@ -70,10 +70,10 @@ public class Ana extends Activity {
                 return true;
             }
         });
-        w.loadUrl(SITE + hedef(getIntent()));
+        w.loadUrl(SITE + BuildConfig.SAYFA + hedef(getIntent()));
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
             requestPermissions(new String[]{ Manifest.permission.POST_NOTIFICATIONS }, BILDIRIM);
-        Denetci.planla(this);
+        if (BuildConfig.MAGAZA) Denetci.planla(this);   // güncelleme bildirimleri yalnızca mağazada
     }
 
     /** uygulamamerkezi://paket/com.azat.haykir → "#/paket/com.azat.haykir"; uygulamamerkezi://app/haykir → "#/app/haykir" */
@@ -90,7 +90,7 @@ public class Ana extends Activity {
         super.onNewIntent(i); setIntent(i);
         String h = hedef(i);
         if (h.isEmpty()) return;
-        if (yuklendi) w.evaluateJavascript("location.hash=" + JSONObject.quote(h), null); else w.loadUrl(SITE + h);
+        if (yuklendi) w.evaluateJavascript("location.hash=" + JSONObject.quote(h), null); else w.loadUrl(SITE + BuildConfig.SAYFA + h);
     }
 
     /** Sayfaya olay gönder (indirme ilerlemesi, kurulum sonucu…). Her iş parçacığından çağrılabilir. */

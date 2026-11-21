@@ -4,12 +4,16 @@ android {
     namespace 'com.azat.uygulamamerkezi'
     compileSdk 35
     defaultConfig {
-        applicationId 'com.azat.uygulamamerkezi'
         minSdk 24
         targetSdk 34
         versionCode NO
         versionName '1.0.' + NO
-        resValue 'string', 'app_name', 'Uygulama Merkezi'
+    }
+    // İki uygulama: mağaza (davetliler) ve yönetim paneli (yalnızca sahip). Aynı kabuk, farklı sayfa.
+    flavorDimensions = ['uyg']
+    productFlavors {
+        magaza  { dimension 'uyg'; applicationId 'com.azat.uygulamamerkezi';        resValue 'string', 'app_name', 'Uygulama Merkezi'; buildConfigField 'String', 'SAYFA', '""';           buildConfigField 'boolean', 'MAGAZA', 'true' }
+        yonetim { dimension 'uyg'; applicationId 'com.azat.uygulamamerkeziyonetim'; resValue 'string', 'app_name', 'UM Yönetim';        buildConfigField 'String', 'SAYFA', '"admin.html"'; buildConfigField 'boolean', 'MAGAZA', 'false' }
     }
     signingConfigs {
         imza {

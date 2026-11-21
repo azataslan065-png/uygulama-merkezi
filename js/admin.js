@@ -7,6 +7,18 @@
   "use strict";
   const { $, $$, html, raw, I, toast, alertErr, confirmDlg, dialog, loading, copy, qrSvg, fmtNum, fmtDate, fmtSize, ago, slug, appIcon, modal, starsHtml, readImage, esc } = UI;
   const D = UMData, C = UM_CONFIG;
+  const REL = "https://github.com/" + C.repo.owner + "/" + C.repo.name + "/releases/download/apk/";
+  const APK_STORE = REL + "Uygulama-Merkezi.apk", APK_ADMIN = REL + "Uygulama-Merkezi-Yonetim.apk";
+  const Y = window.UMYerel || null;
+  // Yönetim uygulamasının kendi güncellemesi: GitHub'daki son APK telefondakinden yeniyse sorar ve içeriden kurar
+  async function selfUpdate() {
+    if (!Y) return;
+    try {
+      const me = JSON.parse(Y.bilgi("com.azat.uygulamamerkeziyonetim")); const s = await D.releaseStats(APK_ADMIN, { fresh: true });
+      if (!s || !me.kurulu || me.zaman >= Date.parse(s.updated) - 120000) return;
+      if (await confirmDlg("Yönetim uygulaması güncellemesi", "Yeni sürüm hazır (" + fmtSize(s.size) + "). Şimdi kurulsun mu?", "Güncelle")) { window.UMYerelOlay = (e) => { if (e && e.tur === "ilerleme" && e.toplam) loading(true, "İniyor %" + Math.round(e.inen * 100 / e.toplam)); else if (e && e.tur === "onay") loading(false); else if (e && e.tur === "bitti") { loading(false); if (e.mesaj) alertErr("Kurulamadı", e.mesaj); } }; loading(true, "İniyor…"); Y.kur("__admin", APK_ADMIN); }
+    } catch {}
+  }
   const view = $("#view");
   let db = null, published = null, stats = {}, live = { invites: {}, members: {}, claims: {}, events: {}, reviews: {}, reports: {}, queue: {} };
 
@@ -549,6 +561,12 @@
         <div class="rowbtns" style="margin-top:0"><button class="btn ghost" id="tokTest">Bağlantıyı test et</button><button class="btn primary" id="tokSave">Kaydet</button></div>
       </section>
 
+      <section class="form-sec glass"><h4><em>📱</em>Telefon uygulamaları</h4>
+        <p class="help" style="margin-top:0">Mağaza ve yönetim paneli Android uygulaması olarak da var. Uygulamalar mağaza uygulamasının içinden tarayıcı uyarısı olmadan kurulur. Davetlilere mağaza uygulamasının bağlantısını gönder; yönetim uygulaması yalnızca senin için.</p>
+        <div class="rowbtns" style="margin-top:0"><a class="btn primary" href="${APK_STORE}" rel="noopener">${raw(I.dl)}Mağaza APK</a><a class="btn ghost" href="${APK_ADMIN}" rel="noopener">${raw(I.dl)}Yönetim APK</a></div>
+        <button class="btn ghost block" id="cpStoreApk" style="margin-top:10px">${raw(I.copy)}Mağaza APK bağlantısını kopyala</button>
+      </section>
+
       <section class="form-sec glass"><h4><em>⟳</em>Uygulama içi güncelleme uyarısı</h4>
         <p class="help" style="margin-top:0">Her yayında <code>${C.versionsPath}</code> dosyası güncellenir. Bir uygulamanın sayfasına aşağıdaki tek satırı eklersen, açılışta yeni sürüm varsa “Güncelleme var” uyarısı çıkar ve mağazadaki sayfasına götürür. <b>Kimlik</b> ve <b>sürüm</b> kısmını o uygulamanınkiyle değiştir.</p>
         <div class="linkbox"><code>${snippet}</code><button class="btn sm ghost" id="cpSnip">${raw(I.copy)}Kopyala</button></div>
@@ -580,6 +598,7 @@
       save("Mağaza bilgileri kaydedildi");
     };
     $("#cpSnip").onclick = () => copy(snippet, "Kod kopyalandı");
+    $("#cpStoreApk").onclick = () => copy(APK_STORE);
     $("#exp").onclick = () => copy(JSON.stringify(db, null, 2), "Yedek kopyalandı");
     $("#imp").onchange = async (e) => { const file = e.target.files[0]; if (!file) return;
       try { const j = D.normalize(JSON.parse(await file.text())); if (!(await confirmDlg("İçe aktarılsın mı?", `${j.apps.length} uygulama yüklenecek; mevcut taslağın yerine geçer.`, "İçe aktar", true))) return; db = j; save("Yedek içe aktarıldı"); render(); }
@@ -607,7 +626,7 @@
 
   async function start() {
     $("#topbar").classList.remove("hidden"); $("#tabs").classList.remove("hidden");
-    await loadData(); render();
+    await loadData(); render(); setTimeout(selfUpdate, 2000);
   }
   // statik parçalar
   $("#logoMark").innerHTML = I.logo; $("#openStore").innerHTML = I.home; $("#pubIc").innerHTML = I.cloud; $("#fab").innerHTML = I.plus;
