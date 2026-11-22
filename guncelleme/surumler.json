@@ -1,32 +1,4 @@
 {
-  "updatedAt": "2026-11-21T19:32:07.831Z",
-  "apps": {
-    "skorbord": {
-      "name": "Skorbord",
-      "version": "49",
-      "updated": "2026-11-21",
-      "paket": "com.azat.skorbord",
-      "apkMs": 1795286146000,
-      "url": "https://github.com/azataslan065-png/skorbord/releases/download/apk/Skorbord.apk",
-      "store": "https://azataslan065-png.github.io/uygulama-merkezi/#/app/skorbord"
-    },
-    "haykir": {
-      "name": "Haykir",
-      "version": "1",
-      "updated": "2026-11-20",
-      "paket": "com.azat.haykir",
-      "apkMs": 1795233603000,
-      "url": "https://github.com/azataslan065-png/haykir/releases/download/apk/Haykir.apk",
-      "store": "https://azataslan065-png.github.io/uygulama-merkezi/#/app/haykir"
-    },
-    "futbol-ligi": {
-      "name": "Futbol Ligi",
-      "version": "1.0.0",
-      "updated": "2026-11-20",
-      "paket": "com.azat.saha",
-      "apkMs": 1795246038000,
-      "url": "https://github.com/azataslan065-png/futbol-ligi/releases/download/apk/SAHA.apk",
-      "store": "https://azataslan065-png.github.io/uygulama-merkezi/#/app/futbol-ligi"
-    }
-  }
+  "updatedAt": "2026-11-22T17:51:08.193Z",
+  "apps": {}
 }
