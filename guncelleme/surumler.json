@@ -1,23 +1,4 @@
 {
-  "updatedAt": "2026-11-23T16:22:46.538Z",
-  "apps": {
-    "futbol-ligi": {
-      "name": "Futbol Ligi",
-      "version": "91",
-      "updated": "2026-11-22",
-      "paket": "",
-      "apkMs": 1795371581000,
-      "url": "https://github.com/azataslan065-png/futbol-ligi/releases/download/apk/Puan-Tablosu.apk",
-      "store": "https://azataslan065-png.github.io/uygulama-merkezi/#/app/futbol-ligi"
-    },
-    "skorbord": {
-      "name": "Skorbord",
-      "version": "59",
-      "updated": "2026-11-22",
-      "paket": "com.azat.skorbord",
-      "apkMs": 1795374479000,
-      "url": "https://github.com/azataslan065-png/skorbord/releases/download/apk-test/Skorbord-Test.apk",
-      "store": "https://azataslan065-png.github.io/uygulama-merkezi/#/app/skorbord"
-    }
-  }
+  "updatedAt": "2026-11-23T16:28:42.286Z",
+  "apps": {}
 }
