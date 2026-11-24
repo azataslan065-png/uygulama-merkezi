@@ -1,6 +1,15 @@
 {
-  "updatedAt": "2026-11-23T16:29:24.233Z",
+  "updatedAt": "2026-11-24T18:43:15.081Z",
   "apps": {
+    "futbol-ligi": {
+      "name": "Futbol Ligi",
+      "version": "91",
+      "updated": "2026-11-22",
+      "paket": "",
+      "apkMs": 1795371581000,
+      "url": "https://github.com/azataslan065-png/futbol-ligi/releases/download/apk/SAHA-Admin.apk",
+      "store": "https://azataslan065-png.github.io/uygulama-merkezi/#/app/futbol-ligi"
+    },
     "skorbord": {
       "name": "Skorbord",
       "version": "59",
