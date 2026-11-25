@@ -1,9 +1,9 @@
 {
-  "updatedAt": "2026-11-25T16:25:34.410Z",
+  "updatedAt": "2026-11-25T16:59:42.382Z",
   "apps": {
     "hayal-motoru": {
       "name": "Hayal Motoru",
-      "version": "4",
+      "version": "5",
       "updated": "2026-11-25",
       "paket": "com.azat.hayalmotoru",
       "apkMs": 1795623854000,
