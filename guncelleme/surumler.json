@@ -1,6 +1,15 @@
 {
-  "updatedAt": "2026-11-25T01:18:49.314Z",
+  "updatedAt": "2026-11-25T16:25:34.410Z",
   "apps": {
+    "hayal-motoru": {
+      "name": "Hayal Motoru",
+      "version": "4",
+      "updated": "2026-11-25",
+      "paket": "com.azat.hayalmotoru",
+      "apkMs": 1795623854000,
+      "url": "https://github.com/azataslan065-png/hayal-motoru/releases/download/apk/HayalMotoru.apk",
+      "store": "https://azataslan065-png.github.io/uygulama-merkezi/#/app/hayal-motoru"
+    },
     "futbol-ligi": {
       "name": "Futbol Ligi",
       "version": "91",
