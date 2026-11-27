@@ -2,7 +2,7 @@
  * Yalnızca iki şey yapılır: uygulama yükleme ve kendi uygulamasını düzenleme. Başka hiçbir özellik yoktur.
  * Yönetici onayı gerekmez: dosyalar GitHub'a aktarılınca uygulama mağazada görünür. Bir aksilik olursa yönetici
  * yayından kaldırabilir ya da silebilir.
- * Dosyalar (ikon, ekran görüntüleri, video, APK) telefondan seçilir; bağlantı yazılmaz. Dosyalar önce Firebase'e
+ * APK geliştiricinin GitHub deposunun son sürümünden (Releases) alınır. İkon, ekran görüntüleri ve video telefondan seçilir. Dosyalar önce Firebase'e
  * parça parça yazılır, sunucudaki GitHub görevi bunları GitHub'a aktarır (bkz. UMData.dev.upload).
  */
 (function () {
@@ -49,7 +49,8 @@
     if (id && !ex) { location.hash = "#/"; return; }
     const a = ex ? JSON.parse(JSON.stringify(ex)) : { kind: "apk", screenshots: [] };
     // Seçilen yeni dosyalar (gönderince yüklenir): ikon, video, apk → Blob; ekran görüntüleri → {url} ya da {blob, pv}
-    const nw = { icon: null, video: null, apk: null };
+    const nw = { icon: null, video: null };
+    let gh = null;   // GitHub'dan getirilen APK bilgisi
     let shots = (a.screenshots || []).filter((u) => ok(u)).map((u) => ({ url: u }));
     const d = ex && durum(ex);
     view.innerHTML = html`<div class="view"><div class="sec-h" style="margin-top:6px"><h2>${ex ? "Uygulamayı düzenle" : "Uygulama yükle"}</h2><a href="#/" style="color:var(--mut);font-size:13px">Vazgeç</a></div>
@@ -64,9 +65,10 @@
         <label class="field"><span>Özellikler</span><textarea class="inp sm" name="features" placeholder="Her satıra bir özellik">${a.features || ""}</textarea></label>
       </section>
       <section class="form-sec"><h4><em>2</em>Uygulama dosyası</h4>
-        <div class="field" data-for="apk"><span>APK dosyası${ok(a.apkUrl) ? "" : " *"}</span><label class="drop"><input type="file" data-file="apk"><div class="pv">${raw(I.dl)}</div><div><b id="apkT">${ok(a.apkUrl) ? "Yeni APK seç (güncelleme)" : "APK seç"}</b><small id="apkS">${ok(a.apkUrl) ? "Şu anki sürüm " + esc(a.version || "") : "En fazla 100 MB"}</small></div></label></div>
+        <div class="field" data-for="apk"><span>GitHub deposu *</span><div style="display:flex;gap:8px"><input class="inp" name="ghRepo" value="${a.ghRepo || ""}" placeholder="kullanici/depo" autocapitalize="none" spellcheck="false" style="flex:1;min-width:0"><button type="button" class="btn primary" id="ghFill" style="flex:none"><span>Getir</span></button></div>
+          <small id="apkS">${ok(a.apkUrl) ? "Şu anki: " + esc(decodeURIComponent(a.apkUrl.split("/").pop())) + " · sürüm " + esc(a.version || "—") : "Deponun son sürümündeki (Releases) APK kullanılır; yeni sürüm yayınlayınca mağaza güncellemeyi kendisi görür."}</small></div>
         <label class="field" data-for="web"><span>Web adresi *</span><input class="inp" name="webUrl" value="${a.webUrl || ""}" inputmode="url" placeholder="https://…"></label>
-        <div class="cols"><label class="field"><span>Sürüm</span><input class="inp" name="version" value="${a.version || ""}" maxlength="20" placeholder="APK'dan okunur"></label>
+        <div class="cols"><label class="field"><span>Sürüm</span><input class="inp" name="version" value="${a.version || ""}" maxlength="20" placeholder="GitHub'dan gelir"></label>
           <label class="field" data-for="apk"><span>Min. Android</span><input class="inp" name="minAndroid" value="${a.minAndroid || ""}" maxlength="8" placeholder="7.0"></label></div>
         <label class="field"><span>Bu sürümde yenilikler</span><textarea class="inp sm" name="whatsNew" placeholder="Her satıra bir değişiklik">${a.whatsNew || ""}</textarea></label>
       </section>
@@ -91,14 +93,6 @@
       const files = [...inp.files]; inp.value = ""; if (!files.length) return;
       const k = inp.dataset.file;
       try {
-        if (k === "apk") {
-          // (2026-11-27) KÖK SEBEP ("geliştirici dosya yükleyemiyor"): seçiciye ".apk" türü veriliyordu; Android bunu dosya türü olarak
-          // tanımıyor ve seçicide hiçbir dosya göstermiyordu. Artık seçici tüm dosyaları gösterir; APK olduğu içeriğinden anlaşılır (ZIP imzası).
-          const fl = files[0], bas = new Uint8Array(await fl.slice(0, 4).arrayBuffer());
-          if (!(bas[0] === 0x50 && bas[1] === 0x4b) || (!/\.apk$/i.test(fl.name) && !/android|octet|zip/i.test(fl.type || ""))) throw new Error("Seçilen dosya APK değil. Uygulamanın .apk dosyasını seç (genelde İndirilenler klasöründe).");
-          if (fl.size > MAX_APK) throw new Error(`APK ${fmtSize(fl.size)}; en fazla 100 MB olabilir.`);
-          nw.apk = fl; $("#apkT").textContent = fl.name; $("#apkS").textContent = fmtSize(fl.size) + " · gönderince yüklenir"; return;
-        }
         if (k === "video") {
           const fl = files[0]; if (fl.type && !/^video\//.test(fl.type)) throw new Error("Bir video dosyası seç.");
           if (fl.size > MAX_VIDEO) throw new Error(`Video ${fmtSize(fl.size)}; en fazla 50 MB olabilir. Kısaltıp tekrar dene.`);
@@ -114,6 +108,27 @@
         loading(false);
       } catch (e) { loading(false); alertErr("Dosya eklenemedi", e.message); }
     }));
+    // APK yalnızca GitHub'dan: deponun son sürümündeki APK (yönetim panelindeki "GitHub'dan doldur" ile aynı yol)
+    $("#ghFill").onclick = async () => {
+      const repo = F.ghRepo.value.trim(); if (!repo) { F.ghRepo.classList.add("err"); return alertErr("Depo gerekli", "Örnek: kullanici/oyunum ya da github.com/kullanici/oyunum"); }
+      loading(true, "GitHub'dan alınıyor…");
+      try {
+        const info = await D.releases(repo.replace(/^https?:\/\/github\.com\//i, ""));
+        const rel = info.releases.find((r) => r.apks.length && !r.pre) || info.releases.find((r) => r.apks.length);
+        if (!rel) throw new Error("Bu deponun yayınlanmış sürümlerinde (Releases) .apk dosyası yok. Önce GitHub'da bir sürüm yayınlayıp APK'yı ekle.");
+        let apk = rel.apks[0];
+        if (rel.apks.length > 1) { loading(false); apk = await new Promise((res) => { const m = UI.modal(`<h3>Hangi APK?</h3><p>Son sürümde birden fazla APK var.</p>${rel.apks.map((x, i) => `<button class="btn ghost block" data-k="${i}" style="margin-bottom:8px">${esc(x.name)} · ${fmtSize(x.size)}</button>`).join("")}`, { onClose: () => res(null) }); $$("[data-k]", m.el).forEach((x) => x.onclick = () => { res(rel.apks[+x.dataset.k]); m.close(); }); }); if (!apk) return; loading(true, "GitHub'dan alınıyor…"); }
+        const pk = await D.packagesOf(info.owner, info.repo);
+        gh = { url: apk.url, size: fmtSize(apk.size), ms: Date.parse(apk.updated) || Date.now(), paket: pk.length === 1 ? pk[0] : a.paket || "" };
+        F.ghRepo.value = info.owner + "/" + info.repo;
+        if (!F.version.value.trim() || F.version.value === a.version) F.version.value = D.versionFrom(rel);
+        if (!F.whatsNew.value.trim()) { const n = D.notesFrom(rel.body); if (n.length) F.whatsNew.value = n.join("\n"); }
+        if (!F.name.value.trim()) F.name.value = info.repo.replace(/[-_]+/g, " ");
+        if (!F.short.value.trim() && info.description) F.short.value = info.description.slice(0, 140);
+        $("#apkS").textContent = `${apk.name} · ${fmtSize(apk.size)} · sürüm ${F.version.value} ✓`;
+        loading(false); toast("APK bulundu", "ok");
+      } catch (err) { loading(false); gh = null; alertErr("GitHub'dan alınamadı", err.message); }
+    };
     f.onsubmit = async (e) => {
       e.preventDefault();
       $$(".inp.err", f).forEach((x) => x.classList.remove("err"));
@@ -121,7 +136,7 @@
       const need = [F.name, F.short].concat(web ? [F.webUrl] : []).filter((el) => !el.value.trim());
       need.forEach((el) => el.classList.add("err"));
       if (need.length) return alertErr("Eksik alanlar var", "Yıldızlı alanları doldur.");
-      if (!web && !nw.apk && !ok(a.apkUrl)) return alertErr("APK gerekli", "Uygulamanın APK dosyasını seç.");
+      if (!web && !gh && !ok(a.apkUrl)) return alertErr("APK gerekli", "GitHub deposunu yazıp “Getir”e dokun.");
       if (web && !/^https:\/\/\S+$/i.test(F.webUrl.value.trim())) { F.webUrl.classList.add("err"); return alertErr("Adres geçersiz", "Web adresi https:// ile başlamalı."); }
       const nid = ex ? ex.id : slug(F.name.value);
       if (!nid || nid.length < 2) return alertErr("Ad geçersiz", "Uygulama adına en az iki harf ya da rakam yaz.");
@@ -132,7 +147,7 @@
       const v = {
         name: F.name.value.trim(), short: F.short.value.trim(), description: F.description.value.trim(), category: F.category.value.trim(), kind: F.kind.value,
         version: F.version.value.trim(), minAndroid: web ? "" : F.minAndroid.value.trim(), webUrl: web ? F.webUrl.value.trim() : "",
-        apkUrl: web ? "" : nw.apk ? job("apk", nw.apk, nw.apk.name) : ok(a.apkUrl), paket: web ? "" : a.paket || "", size: web ? "" : nw.apk ? fmtSize(nw.apk.size) : a.size || "", apkMs: web ? 0 : a.apkMs || 0,
+        apkUrl: web ? "" : gh ? gh.url : ok(a.apkUrl), paket: web ? "" : gh ? gh.paket : a.paket || "", size: web ? "" : gh ? gh.size : a.size || "", apkMs: web ? 0 : gh ? gh.ms : a.apkMs || 0, ghRepo: web ? "" : F.ghRepo.value.trim(),
         features: F.features.value.trim(), whatsNew: F.whatsNew.value.trim(), devName: me.name || "",
         icon: nw.icon ? job("icon", nw.icon, "icon.png") : ok(a.icon),
         video: nw.video ? job("video", nw.video, nw.video.name) : dropVideo ? "" : ok(a.video),
