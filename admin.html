@@ -6,16 +6,18 @@
 <meta name="robots" content="noindex,nofollow,noarchive,nosnippet,noimageindex">
 <meta name="googlebot" content="noindex,nofollow">
 <meta name="referrer" content="no-referrer">
-<meta name="theme-color" content="#07070c">
-<title>Yönetim · Uygulama Merkezi</title>
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#131314" media="(prefers-color-scheme: dark)">
+<title>TEST · Yönetim · Uygulama Merkezi</title>
 <link rel="icon" href="icons/icon-192.png">
 <link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="css/play.css">
 <style>
 .adm-tabs{position:fixed;left:0;right:0;margin:0 auto;width:calc(100% - 20px);max-width:560px;bottom:calc(10px + var(--safe-b));z-index:30;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:2px;padding:5px;border-radius:22px;box-shadow:var(--shadow)}
 .adm-tabs a{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:54px;padding:6px 2px;border-radius:16px;color:var(--mut);font-weight:700;font-size:11px;line-height:1.1;min-width:0;transition:all .3s var(--ease)}
 .adm-tabs a span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .adm-tabs a svg{width:21px;height:21px;flex:none}
-.adm-tabs a.on{background:var(--txt);color:#0a0a12}
+
 .adm-tabs .cnt{position:absolute;top:4px;left:calc(50% + 6px);min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:var(--bad);color:#fff;font-size:10.5px;font-style:normal;display:grid;place-items:center}
 .shell{padding-bottom:calc(110px + var(--safe-b))}
 .pubbtn{position:relative}
@@ -52,9 +54,7 @@
 .auth .logo svg{width:28px;height:28px}
 </style>
 </head>
-<body>
-<div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
-<div class="grain" aria-hidden="true"></div>
+<body class="admin um-test"><div id="testBand">TEST SÜRÜMÜ</div>
 <div class="shell">
   <header class="topbar hidden" id="topbar">
     <a class="brand" href="#/panel"><span class="logo" id="logoMark"></span><span>Yönetim</span></a>
