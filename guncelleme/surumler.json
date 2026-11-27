@@ -1,32 +1,4 @@
 {
-  "updatedAt": "2026-11-27T19:18:31.271Z",
-  "apps": {
-    "hayal-motoru": {
-      "name": "Hayal Motoru",
-      "version": "5",
-      "updated": "2026-11-25",
-      "paket": "com.azat.hayalmotoru",
-      "apkMs": 1795768139000,
-      "url": "https://github.com/azataslan065-png/hayal-motoru/releases/download/apk/HayalMotoru.apk",
-      "store": "https://azataslan065-png.github.io/uygulama-merkezi/#/app/hayal-motoru"
-    },
-    "futbol-ligi": {
-      "name": "Futbol Ligi",
-      "version": "91",
-      "updated": "2026-11-22",
-      "paket": "com.azat.sahaadmin",
-      "apkMs": 1795371581000,
-      "url": "https://github.com/azataslan065-png/futbol-ligi/releases/download/apk/SAHA-Admin.apk",
-      "store": "https://azataslan065-png.github.io/uygulama-merkezi/#/app/futbol-ligi"
-    },
-    "skorbord": {
-      "name": "Skorbord",
-      "version": "59",
-      "updated": "2026-11-22",
-      "paket": "com.azat.skorbord",
-      "apkMs": 1795374479000,
-      "url": "https://github.com/azataslan065-png/skorbord/releases/download/apk-test/Skorbord-Test.apk",
-      "store": "https://azataslan065-png.github.io/uygulama-merkezi/#/app/skorbord"
-    }
-  }
+  "updatedAt": "2026-11-27T20:00:11.291Z",
+  "apps": {}
 }
