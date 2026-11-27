@@ -22,5 +22,6 @@ window.UM_CONFIG = Object.freeze({
   assetsDir: "assets/apps",
   versionsPath: "guncelleme/surumler.json",
   siteUrl: "https://azataslan065-png.github.io/uygulama-merkezi/",
+  rootUrl: "https://azataslan065-png.github.io/uygulama-merkezi/",   // kök (sürüm dosyası, uygulama içi bağlantılar); test kopyasında da aynı kalır
   statsTtlMs: 10 * 60 * 1000
 });

@@ -87,14 +87,19 @@
       return this;
     },
     _owner() { return this.uid && dig(mget(), "owner") === this.uid; },
-    _member(beta) { const d = mget(), c = dig(d, "claims/" + this.uid), iv = c && dig(d, "invites/" + c); return !!(iv && iv.active === true && (!beta || iv.beta === true)); },
+    _member(beta, app) { const d = mget(), c = dig(d, "claims/" + this.uid), iv = c && dig(d, "invites/" + c); return !!(iv && iv.active === true && (!beta || iv.beta === true || (app && iv.test && iv.test[app] === true))); },
+    _dev(code) { const d = mget(), c = dig(d, "gclaims/" + this.uid), g = c && dig(d, "gelistirici/" + c); return !!(g && g.active === true && (!code || c === code)); },
     _deny() { const e = new Error("Bu işlem için yetkin yok."); e.code = "denied"; return e; },
     async get(p) {
       await new Promise((r) => setTimeout(r, 60));
       const top = parts(p)[0], d = mget();
       const ok = this._owner() || top === "owner" ||
         (["catalog", "inbox", "reviews", "media"].includes(top) && this._member()) ||
-        (top === "beta" && this._member(true)) ||
+        (top === "beta" && this._member(true, parts(p)[1])) ||
+        (top === "gclaims" && parts(p)[1] === this.uid) ||
+        (top === "gelistirici" && parts(p).length === 2 && dig(d, "gclaims/" + this.uid) === parts(p)[1]) ||
+        (top === "gapps" && parts(p)[1] && this._dev(parts(p)[1])) ||
+        (top === "gapps" && this._member()) ||
         (top === "invites" && parts(p).length === 2 && dig(d, "claims/" + this.uid) === parts(p)[1]) ||
         (top === "claims" && parts(p)[1] === this.uid);
       if (!ok) throw this._deny();
@@ -102,7 +107,9 @@
     },
     async set(p, v) {
       const top = parts(p)[0], d = mget();
-      if (top === "claims") { if (parts(p)[1] !== this.uid || (v && !(dig(d, "invites/" + v) || {}).active)) throw this._deny(); }
+      if (top === "gclaims") { if (parts(p)[1] !== this.uid || (v && !(dig(d, "gelistirici/" + v) || {}).active)) throw this._deny(); }
+      else if (["gapps", "parca", "yukleme"].includes(top) && !this._owner()) { if (!this._dev(parts(p)[1])) throw this._deny(); }
+      else if (top === "claims") { if (parts(p)[1] !== this.uid || (v && !(dig(d, "invites/" + v) || {}).active)) throw this._deny(); }
       else if (top === "owner") { if (d.owner || v !== this.uid) throw this._deny(); }
       else if (!this._owner() && !(["members", "events", "reviews", "reports", "push"].includes(top) && this._member())) throw this._deny();
       put(d, p, v); mput(d);

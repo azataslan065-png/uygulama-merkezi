@@ -1,5 +1,5 @@
-/* Uygulama Merkezi — kullanıcı tarafı (mağaza)
- * Rotalar:  #/  ana sayfa · #/app/<id> detay · #/favoriler · #/bildirimler
+/* Uygulama Merkezi — kullanıcı tarafı (mağaza) · Play Store düzeni (2026-11-27)
+ * Rotalar:  #/  ana sayfa · #/app/<id> detay · #/favoriler · #/bildirimler · #/paket/<paket>
  * Davet: ?d=<kod> bağlantısıyla gelen ya da kodu elle giren kişi Firebase'e "claim" yazar;
  * veritabanı kuralları yalnızca iptal edilmemiş bir davetle giriş yapanlara kataloğu açar.
  */
@@ -8,12 +8,11 @@
   const { $, $$, html, raw, I, toast, alertErr, modal, shareSheet, fmtNum, fmtDate, fmtSize, ago, appIcon, starsHtml, readImage } = UI;
   const D = UMData, C = UM_CONFIG;
   const view = $("#view");
-  const state = { db: null, offline: false, q: "", cat: "Tümü", stats: {}, invite: null, beta: {}, reviews: {}, inbox: [], busy: {}, pendingV: {} };
+  const state = { db: null, ozel: [], dev: [], offline: false, q: "", cat: "Tümü", stats: {}, invite: null, beta: {}, reviews: {}, inbox: [], busy: {}, pendingV: {}, cands: {} };
   // Uygulama Merkezi Android uygulamasının içinde mi açıldı? (köprü: android/…/Ana.java "UMYerel")
   const Y = window.UMYerel || null;
   const STORE_APK = "https://github.com/" + C.repo.owner + "/" + C.repo.name + "/releases/download/apk/Uygulama-Merkezi.apk";
-  const STORE_PKG = "com.azat.uygulamamerkezi";
-  // Tarayıcıdan uygulamayı aç (davet koduyla). Uygulama kurulu değilse Android mağaza APK'sını indirir.
+  const STORE_PKG = "com.azat.uygulamamerkezi", ADMIN_PKG = "com.azat.uygulamamerkeziyonetim";
   const isAndroid = /Android/i.test(navigator.userAgent);
   function appLink() {
     const kod = D.member.code(), path = kod ? "davet/" + kod : "ac/";
@@ -23,87 +22,86 @@
   /* ---------- statik parçalar ---------- */
   $("#splash .logo").innerHTML = I.logo; $("#logoMark").innerHTML = I.logo;
   $("#shareStore").innerHTML = I.share; $("#bell").innerHTML = I.bell + '<span class="dot hidden" id="bellDot"></span>';
-  $('[data-tab="home"]').innerHTML = I.home + "<span>Keşfet</span>";
-  $('[data-tab="fav"]').innerHTML = I.star + "<span>Favoriler</span>";
-  addEventListener("scroll", () => $("#topbar").classList.toggle("scrolled", scrollY > 8), { passive: true });
+  $("#topSearchIc").innerHTML = I.search;
+  $('[data-tab="home"]').innerHTML = '<i>' + I.home + "</i><span>Uygulamalar</span>";
+  $('[data-tab="fav"]').innerHTML = '<i>' + I.star + "</i><span>Favoriler</span>";
+  $('[data-tab="bell"]').innerHTML = '<i>' + I.bell + '<b class="dot hidden" id="tabBellDot"></b></i><span>Bildirimler</span>';
+  addEventListener("scroll", () => $("#topbar").classList.toggle("scrolled", scrollY > 4), { passive: true });
 
   /* ---------- yardımcılar ---------- */
-  const visibleApps = () => state.db.apps.filter((a) => !a.hidden);
+  const allApps = () => state.db.apps.concat(state.ozel, state.dev);
+  const visibleApps = () => allApps().filter((a) => !a.hidden);
   const byId = (id) => visibleApps().find((a) => a.id === id);
-  const isNew = (a) => (Date.now() - new Date(a.created || a.updated)) / 864e5 < 14;
-  /* Telefondaki durum (yalnızca mağaza uygulamasında): yukle | guncelle | ac | null (bilinmiyor) */
+  const isWeb = (a) => a.kind === "web";
+  const isOwner = () => !!(state.invite && state.invite.owner);
+  /* Paket adları: katalogdaki (virgülle birden fazla olabilir) ya da depodan bulunan adaylar */
+  const pkgs = (a) => { const p = D.pkgsOf(a); return p.length ? p : state.cands[a.id] || []; };
+  /* Telefonda kurulu mu? Adaylardan kurulu olanı döndürür. Köprü yoksa (tarayıcı) null. */
+  function pkgInfo(a) {
+    if (!Y || isWeb(a)) return null;
+    const ps = pkgs(a); if (!ps.length) return null;
+    for (const p of ps) { try { const i = JSON.parse(Y.bilgi(p)); if (i && i.kurulu) return Object.assign({ paket: p }, i); } catch { return null; } }
+    return { kurulu: false, paket: ps[0] };
+  }
+  /* yukle | guncelle | ac | null (bilinmiyor) */
   function status(a) {
-    if (!Y || a.kind === "web" || !a.paket) return null;
-    let i; try { i = JSON.parse(Y.bilgi(a.paket)); } catch { return null; }
+    const i = pkgInfo(a); if (!i) return null;
     if (!i.kurulu) return "yukle";
     const rec = D.user.installed()[a.id];
-    // GitHub'daki APK'nın gerçek yüklenme zamanı (canlı), yoksa katalogdaki; telefondaki kurulum bundan eskiyse güncelleme var
     const apk = (state.stats[a.id] && Date.parse(state.stats[a.id].updated)) || a.apkMs;
     if (apk && i.zaman < apk - 120000) return "guncelle";
     if (!apk && rec && rec !== a.version) return "guncelle";
     return "ac";
   }
-  const hasUpdate = (a) => { if (a.kind === "web") return false; const s = status(a); if (s) return s === "guncelle"; const v = D.user.installed()[a.id]; return !!(v && v !== a.version); };
-  const canRemove = () => !!(Y && typeof Y.kaldir === "function");
+  const hasUpdate = (a) => { if (isWeb(a)) return false; const s = status(a); if (s) return s === "guncelle"; const v = D.user.installed()[a.id]; return !!(v && v !== a.version); };
   const isInstalled = (a) => { const s = status(a); return s === "ac" || s === "guncelle"; };
-  /* Kart ve detay düğmeleri: kurulu değil → Yükle; kurulu → Aç + Kaldır; güncelleme var → Güncelle + Kaldır */
+  const canRemove = () => !!(Y && typeof Y.kaldir === "function");
+  function action(a) {
+    if (isWeb(a)) return { label: "Aç", icon: I.open, k: "ac" };
+    if (state.busy[a.id] != null) return { label: state.busy[a.id], icon: I.dl, busy: true, k: "busy" };
+    const s = status(a);
+    if (s === "ac") return { label: "Aç", icon: I.open, k: "ac" };
+    if (s === "guncelle" || hasUpdate(a)) return { label: "Güncelle", icon: I.dl, k: "guncelle" };
+    return { label: "Yükle", icon: I.dl, k: "yukle" };
+  }
+  /* Test sürümü: yalnızca yöneticinin bu kişi için açtığı uygulamalar; yalnızca site üzerinden açılır */
+  const betaOf = (a) => { const b = state.beta[a.id]; return b && b.webUrl ? b : null; };
+  const betaNote = (a, cls = "") => betaOf(a) ? `<button class="beta-note ${cls}" data-beta="${UI.esc(a.id)}">${I.flask}<span>Bu uygulama için test sürümü mevcut</span></button>` : "";
+  /* Düğmeler: kurulu değil → Yükle; kurulu → Kaldır + Aç; güncelleme var → Kaldır + Güncelle */
   function ctaHtml(a, kind) {
-    const ac = action(a), xl = kind === "detail" ? " xl" : "", id = UI.esc(a.id);
-    const label = kind === "detail" && isWeb(a) ? "Uygulamayı aç" : ac.label;
-    const main = `<button class="btn primary${xl}${ac.busy ? " busy" : ""}" data-act="dl" data-id="${id}">${ac.icon}<span>${UI.esc(label)}</span></button>`;
-    const rm = !ac.busy && canRemove() && !isWeb(a) && isInstalled(a) ? `<button class="btn ghost${xl}" data-act="kaldir" data-id="${id}">${I.trash}<span>Kaldır</span></button>` : "";
-    if (kind === "card") return (rm || `<a class="btn ghost" href="#/app/${encodeURIComponent(a.id)}">Detaylar</a>`) + main;
-    return main + rm;
+    const ac = action(a), id = UI.esc(a.id);
+    if (kind === "row") return `<button class="pill ${ac.k}${ac.busy ? " busy" : ""}" data-act="dl" data-id="${id}"><span>${UI.esc(ac.label)}</span></button>`;
+    const main = `<button class="btn primary${ac.busy ? " busy" : ""}" data-act="dl" data-id="${id}"><span>${UI.esc(ac.label)}</span></button>`;
+    const rm = !ac.busy && canRemove() && !isWeb(a) && isInstalled(a) ? `<button class="btn outline" data-act="kaldir" data-id="${id}"><span>Kaldır</span></button>` : "";
+    return rm + main;
   }
   async function uninstall(a) {
+    const i = pkgInfo(a); if (!i || !i.kurulu) return;
     if (!(await UI.confirmDlg(a.name + " kaldırılsın mı?", "Uygulama telefondan silinir. İstediğin zaman buradan yeniden yükleyebilirsin.", "Kaldır", true))) return;
-    try { Y.kaldir(a.paket); } catch { alertErr("Kaldırılamadı", "Mağaza uygulamasını güncelleyip tekrar dene."); }
-  }
-  function action(a) {
-    if (a.kind === "web") return { label: "Aç", icon: I.open };
-    if (state.busy[a.id] != null) return { label: state.busy[a.id], icon: I.dl, busy: true };
-    const s = status(a);
-    if (s === "ac") return { label: "Aç", icon: I.open };
-    if (s === "guncelle" || hasUpdate(a)) return { label: "Güncelle", icon: I.dl };
-    return { label: Y ? "Yükle" : "İndir", icon: I.dl };
+    try { Y.kaldir(i.paket); } catch { alertErr("Kaldırılamadı", "Mağaza uygulamasını güncelleyip tekrar dene."); }
   }
   const appUrl = (a) => C.siteUrl + "#/app/" + encodeURIComponent(a.id);
-  const isWeb = (a) => a.kind === "web";
-  const betaOf = (a) => (state.invite && state.invite.beta ? state.beta[a.id] : null);
   function downloadsOf(a) { const s = state.stats[a.id]; return (a.downloads || 0) + (s ? s.downloads : 0); }
   const sizeOf = (a) => (isWeb(a) ? "Web" : (state.stats[a.id] && fmtSize(state.stats[a.id].size)) || a.size || "—");
   function rating(id) { const r = Object.values(state.reviews[id] || {}); if (!r.length) return null; return { avg: r.reduce((s, x) => s + (+x.stars || 0), 0) / r.length, n: r.length }; }
+  const devName = (a) => a.devName || state.db.store.owner || state.db.store.name;
+  const comma = (v) => v.toFixed(1).replace(".", ",");
 
   function skeleton() {
-    const card = '<div class="sk-card glass"><div style="display:flex;gap:14px"><div class="sk" style="width:72px;height:72px;border-radius:18px"></div><div style="flex:1;display:grid;gap:8px"><div class="sk" style="height:16px;width:60%"></div><div class="sk" style="height:12px;width:35%"></div><div class="sk" style="height:12px"></div></div></div><div class="sk" style="height:52px"></div><div class="sk" style="height:46px"></div></div>';
-    view.innerHTML = `<div class="sk" style="height:180px;border-radius:28px;margin-top:8px"></div><div class="sk" style="height:52px;border-radius:18px;margin-top:18px"></div><div class="grid" style="margin-top:30px">${card.repeat(3)}</div>`;
+    const row = '<div class="sk-row"><div class="sk" style="width:56px;height:56px;border-radius:14px"></div><div style="flex:1;display:grid;gap:8px"><div class="sk" style="height:14px;width:55%"></div><div class="sk" style="height:12px;width:35%"></div></div></div>';
+    view.innerHTML = `<div class="sk" style="height:34px;width:60%;border-radius:10px;margin:14px 0"></div>${row.repeat(6)}`;
   }
 
-  /* ---------- kart ---------- */
-  function card(a, i = 0) {
-    const fav = D.user.favs().includes(a.id), upd = hasUpdate(a), r = rating(a.id);
-    return html`<article class="card glass" style="animation-delay:${Math.min(i, 8) * 60}ms" data-id="${a.id}">
-      <button class="fav ${fav ? "on" : ""}" data-fav="${a.id}" aria-label="Favorilere ekle">${raw(fav ? I.star : I.starO)}</button>
-      <a class="top" href="#/app/${encodeURIComponent(a.id)}">
-        ${appIcon(a)}
-        <div class="meta"><h3>${a.name}${upd ? raw('<span class="badge upd">GÜNCELLEME</span>') : isNew(a) ? raw('<span class="badge new">YENİ</span>') : ""}${isWeb(a) ? raw('<span class="badge web">WEB</span>') : ""}</h3>
-          <div class="cat">${a.category || "Genel"}${r ? raw(` · ${starsHtml(r.avg)} <small style="color:var(--mut)">${r.avg.toFixed(1).replace(".", ",")}</small>`) : ""}</div>
-          <p class="desc">${a.short || a.description}</p></div>
-      </a>
-      <div class="specs">
-        <div class="spec"><span>Sürüm</span><b>${a.version}</b></div>
-        <div class="spec"><span>Güncelleme</span><b>${fmtDate(a.updated)}</b></div>
-        <div class="spec"><span>Boyut</span><b data-size="${a.id}">${sizeOf(a)}</b></div>
-        <div class="spec"><span>${isWeb(a) ? "Tür" : "Android"}</span><b>${isWeb(a) ? "Web uygulaması" : a.minAndroid ? a.minAndroid + "+" : "—"}</b></div>
-        <div class="spec"><span>İndirme</span><b data-dl="${a.id}">${isWeb(a) ? "—" : fmtNum(downloadsOf(a))}</b></div>
-        <div class="spec"><span>Kategori</span><b>${a.category || "—"}</b></div>
-      </div>
-      <div class="actions" data-cta="card" data-id="${a.id}">${raw(ctaHtml(a, "card"))}</div>
-    </article>`.s;
-  }
-  function bindCards(root) {
-    $$("[data-fav]", root).forEach((b) => b.onclick = (e) => { e.preventDefault(); const on = D.user.toggleFav(b.dataset.fav); b.classList.toggle("on", on); b.innerHTML = on ? I.star : I.starO; toast(on ? "Favorilere eklendi" : "Favorilerden çıkarıldı", on ? "ok" : "info", 1600); if (location.hash.startsWith("#/favoriler")) render(); });
-    /* düğmeler belge düzeyinde dinlenir (bkz. data-act) */
+  /* ---------- liste satırı ---------- */
+  function row(a, i = 0) {
+    const r = rating(a.id);
+    const meta = [a.category || "Genel", r ? comma(r.avg) + " ★" : "", isWeb(a) ? "Web" : sizeOf(a)].filter(Boolean);
+    return html`<div class="app-row" style="animation-delay:${Math.min(i, 10) * 35}ms" data-id="${a.id}">
+      <a class="ar-main" href="#/app/${encodeURIComponent(a.id)}">${appIcon(a)}
+        <div class="ar-t"><b>${a.name}</b><small>${raw(meta.map((m) => UI.esc(m)).join(" · "))}</small>
+          ${a.adminOnly ? raw('<em class="tag adm">Yönetici</em>') : ""}${hasUpdate(a) ? raw('<em class="tag upd">Güncelleme</em>') : ""}${betaOf(a) ? raw('<em class="tag beta">Test sürümü mevcut</em>') : ""}</div></a>
+      <div class="ar-cta" data-cta="row" data-id="${a.id}">${raw(ctaHtml(a, "row"))}</div>
+    </div>`.s;
   }
 
   /* ---------- indirme / açma ---------- */
@@ -114,26 +112,34 @@
     if (!url) return alertErr(isWeb(a) ? "Adres yok" : "İndirme bağlantısı yok", `${a.name} için henüz bir ${isWeb(a) ? "web adresi" : "APK bağlantısı"} eklenmemiş.`);
     if (!isWeb(a) && Y) {   // mağaza uygulaması: tarayıcıya uğramadan indir ve kur
       if (state.busy[a.id] != null) return toast("İniyor, biraz bekle", "info");
-      if (!opt.url && status(a) === "ac") { if (!Y.ac(a.paket)) toast("Uygulama açılamadı", "err"); return; }
-      state.busy[a.id] = "İniyor…"; state.pendingV[a.id] = opt.beta || opt.old ? null : version; refreshButtons(a.id);
-      if (!(state.invite && state.invite.owner)) D.member.download(a, version, opt.beta);
+      if (!opt.url && status(a) === "ac") { const i = pkgInfo(a); if (!Y.ac(i.paket)) toast("Uygulama açılamadı", "err"); return; }
+      state.busy[a.id] = "İniyor…"; state.pendingV[a.id] = opt.old ? null : version; refreshButtons(a.id);
+      if (!isOwner()) D.member.download(a, version, false);
       Y.kur(a.id, url);
       return;
     }
     if (!isWeb(a) && !opt.skipAsk && !/UygulamaMerkeziApp/.test(navigator.userAgent)) {
-      const go = await UI.dialog({ title: "Tarayıcıdan indirme", message: "Tarayıcı APK dosyalarında “Dosya zararlı olabilir” uyarısı gösterir; bu, sitenin kapatabileceği bir uyarı değildir. Uyarısız ve tek dokunuşla kurmak için Uygulama Merkezi uygulamasını bir kez kur; tüm uygulamaları ve güncellemeleri oradan yaparsın.", type: "info",
+      const go = await UI.dialog({ title: "Tarayıcıdan indirme", message: "Tarayıcı APK dosyalarında “Dosya zararlı olabilir” uyarısı gösterir. Uyarısız ve tek dokunuşla kurmak için Uygulama Merkezi uygulamasını kullan.", type: "info",
         actions: [{ label: "Yine de indir", value: "dl" }, { label: "Uygulamada aç", value: "store", primary: true }] });
       if (go === "store") { location.href = appLink(); return; }
       if (go !== "dl") return;
     }
-    if (!isWeb(a) && !opt.beta && !opt.old) D.user.markInstalled(a.id, a.version);
-    if (!(state.invite && state.invite.owner)) D.member.download(a, version, opt.beta);
-    toast(isWeb(a) ? `${a.name} açılıyor…` : `${a.name}${opt.beta ? " (test)" : ""} v${version} indiriliyor…`, "ok");
+    if (!isWeb(a) && !opt.old) D.user.markInstalled(a.id, a.version);
+    if (!isOwner()) D.member.download(a, version, false);
+    toast(isWeb(a) ? `${a.name} açılıyor…` : `${a.name} v${version} indiriliyor…`, "ok");
     openLink(url);
     setTimeout(() => refreshStats(a, true), 4000);
   }
+  // Test sürümü yalnızca site üzerinden açılır (uygulama olarak kurulmaz)
+  function openBeta(a) {
+    const b = betaOf(a); if (!b) return;
+    if (!isOwner()) D.member.download(a, b.version, true);
+    openLink(b.webUrl);
+  }
 
   document.addEventListener("click", (e) => {
+    const bt = e.target.closest("[data-beta]");
+    if (bt && state.db) { e.preventDefault(); const a = byId(bt.dataset.beta); if (a) openBeta(a); return; }
     const b = e.target.closest("[data-act]"); if (!b || !state.db) return;
     const a = byId(b.dataset.id); if (!a) return;
     e.preventDefault();
@@ -143,17 +149,10 @@
   /* ---------- mağaza uygulamasından gelen olaylar ---------- */
   function refreshButtons(only) {
     $$("[data-cta]").forEach((c) => { const id = c.dataset.id; if (only && id !== only) return; const a = byId(id); if (a) c.innerHTML = ctaHtml(a, c.dataset.cta); });
-    $$("[data-dl-btn]").forEach((b) => {
-      const id = b.dataset.dlBtn; if (only && id !== only) return;
-      const a = byId(id); if (!a || a.kind === "web") return;
-      const ac = action(a), sp = $("span", b);
-      b.innerHTML = ac.icon + "<span></span>"; $("span", b).textContent = b.dataset.long && !ac.busy ? (ac.label === "Aç" ? a.name + " aç" : a.name + " · " + ac.label.toLocaleLowerCase("tr") + " · " + sizeOf(a)) : ac.label;
-      b.classList.toggle("busy", !!ac.busy);
-    });
   }
   window.UMYerelOlay = (e) => {
     if (!e) return;
-    if (e.tur === "odak") { if (state.db) { refreshButtons(); $$(".card").forEach((c) => { const a = byId(c.dataset.id); const h = $("h3", c); if (a && h) { const u = hasUpdate(a); const bd = $(".badge.upd", h); if (!u && bd) bd.remove(); } }); } return; }
+    if (e.tur === "odak") { if (state.db) refreshButtons(); return; }
     const a = state.db && byId(e.id), name = a ? a.name : "Uygulama";
     if (e.tur === "ilerleme") { state.busy[e.id] = e.toplam > 0 ? "%" + Math.min(100, Math.round(e.inen * 100 / e.toplam)) : (e.inen / 1048576).toFixed(1).replace(".", ",") + " MB"; }
     else if (e.tur === "kuruluyor") state.busy[e.id] = "Kuruluyor…";
@@ -167,7 +166,6 @@
     }
     refreshButtons(e.id);
   };
-  // Mağaza uygulamasının kendi güncellemesi (yönetici eylemi gerekmez: GitHub'daki son APK'ya bakılır)
   async function storeSelfUpdate() {
     if (!Y) return;
     try {
@@ -197,99 +195,129 @@
     const q = state.q.trim().toLocaleLowerCase("tr");
     const list = apps.filter((a) => (!favOnly || favs.includes(a.id)) && (state.cat === "Tümü" || a.category === state.cat) &&
       (!q || [a.name, a.short, a.description, a.category, ...a.features].join(" ").toLocaleLowerCase("tr").includes(q)));
-    const totalDl = apps.reduce((s, a) => s + downloadsOf(a), 0);
-    const recent = [...apps].sort((x, y) => new Date(y.created) - new Date(x.created)).slice(0, 8);
-    const updated = [...apps].sort((x, y) => new Date(y.updated) - new Date(x.updated)).slice(0, 8);
-    const featured = apps.find((a) => a.featured && a.cover) || null;
-    const st = state.db.store, inv = state.invite;
-    const betaApps = apps.filter((a) => betaOf(a));
-    const showExtras = !favOnly && !q && state.cat === "Tümü" && apps.length > 0;
+    const plain = !favOnly && !q && state.cat === "Tümü";
+    const ups = plain ? apps.filter(hasUpdate) : [];
+    const featured = plain ? apps.find((a) => a.featured && a.cover) : null;
+    const betaApps = plain ? apps.filter((a) => betaOf(a)) : [];
 
     view.innerHTML = html`<div class="view">
-      ${favOnly ? html`<section class="hero glass"><div class="hi">KOLEKSİYONUN</div><h1><span>Favorilerin</span></h1><p>Yıldızladığın uygulamalar burada.</p></section>`
-      : html`<section class="hero glass">
-        <div class="hi">${greeting()}${inv && inv.name ? ", " + inv.name : ""}</div>
-        <h1>Hoş geldin,<br><span>${st.name}</span></h1>
-        <p>${st.tagline || "Sadece davetlilere özel uygulama mağazası."}</p>
-        <div class="stats"><div class="stat"><b>${apps.length}</b><span>uygulama</span></div><div class="stat"><b id="totalDl">${fmtNum(totalDl)}</b><span>indirme</span></div><div class="stat"><b>${st.updatedAt ? ago(st.updatedAt) : "—"}</b><span>son güncelleme</span></div></div>
-      </section>`}
-      ${!Y && !favOnly ? html`<div class="note" style="margin-top:14px;background:rgba(124,92,255,.1);border:1px solid rgba(124,92,255,.3);display:flex;gap:12px;align-items:center;flex-wrap:wrap"><div style="flex:1 1 200px"><b>Uygulama Merkezi uygulamasında aç</b></div><a class="btn primary sm" href="${appLink()}" rel="noopener">${raw(I.open)}Uygulamada aç</a></div>` : ""}
-      <div class="search">${raw(I.search)}<input id="q" type="search" placeholder="Uygulama ara…" value="${state.q}" autocomplete="off" enterkeyhint="search" aria-label="Uygulama ara">${state.q ? raw(`<button class="clear" id="qClear" aria-label="Temizle">${I.x}</button>`) : ""}</div>
-      ${cats.length > 2 || state.cat !== "Tümü" ? html`<div class="chips" role="tablist">${cats.map((c) => html`<button class="chip ${c === state.cat ? "on" : ""}" data-cat="${c}">${c}<span class="n">${c === "Tümü" ? apps.length : apps.filter((a) => a.category === c).length}</span></button>`)}</div>` : ""}
-      ${showExtras && featured ? html`<section class="sec"><a class="feature" href="#/app/${encodeURIComponent(featured.id)}"><img src="${featured.cover}" alt="" decoding="async"><div class="fbody">${appIcon(featured)}<div><span class="tag">Öne çıkan</span><h3>${featured.name}</h3><p>${featured.short}</p></div></div></a></section>` : ""}
-      ${showExtras && betaApps.length ? html`<section class="sec"><div class="sec-h"><h2>Test sürümleri</h2><span>sadece testçiler</span></div><div class="rail">${betaApps.map((a) => html`<a class="mini glass" href="#/app/${encodeURIComponent(a.id)}">${appIcon(a)}<div class="info"><b>${a.name}</b><small>test v${betaOf(a).version} · ${ago(betaOf(a).updated)}</small></div></a>`)}</div></section>` : ""}
-      ${showExtras && apps.length > 1 ? html`<section class="sec"><div class="sec-h"><h2>Son eklenenler</h2></div><div class="rail">${recent.map((a) => mini(a))}</div></section>
-        <section class="sec"><div class="sec-h"><h2>Güncel sürümler</h2></div><div class="rail">${updated.map((a) => mini(a, true))}</div></section>` : ""}
-      <section class="sec"><div class="sec-h"><h2>${favOnly ? "Favori uygulamalar" : "Uygulamalarım"}</h2><span>${list.length} sonuç</span></div>
-        ${list.length ? raw(`<div class="grid">${list.map(card).join("")}</div>`) : emptyState(favOnly, q, apps.length)}</section>
+      ${!Y && !favOnly ? html`<a class="open-app" href="${appLink()}" rel="noopener"><span class="oa-ic">${raw(I.logo)}</span><span class="oa-t"><b>Uygulama Merkezi uygulamasında aç</b><small>Tek dokunuşla kur ve güncelle</small></span><span class="pill yukle"><span>Aç</span></span></a>` : ""}
+      ${favOnly ? html`<h1 class="page-h">Favoriler</h1>` : cats.length > 2 ? html`<div class="chips" role="tablist">${cats.map((c) => html`<button class="chip ${c === state.cat ? "on" : ""}" data-cat="${c}">${c}</button>`)}</div>` : ""}
+      ${ups.length ? html`<section class="sec"><div class="sec-h"><h2>Güncellemeler</h2><span>${ups.length}</span></div><div class="list">${raw(ups.map(row).join(""))}</div></section>` : ""}
+      ${featured ? html`<section class="sec"><a class="feature" href="#/app/${encodeURIComponent(featured.id)}"><img src="${featured.cover}" alt="" decoding="async"><div class="fbody">${appIcon(featured)}<div><h3>${featured.name}</h3><p>${featured.short}</p></div></div></a></section>` : ""}
+      ${betaApps.length ? html`<section class="sec"><div class="sec-h"><h2>Test sürümleri</h2></div><div class="list">${raw(betaApps.map(row).join(""))}</div></section>` : ""}
+      <section class="sec"><div class="sec-h"><h2>${favOnly ? "Favori uygulamalar" : q ? "Arama sonuçları" : state.cat === "Tümü" ? "Tüm uygulamalar" : state.cat}</h2><span>${list.length}</span></div>
+        ${list.length ? raw(`<div class="list">${list.map(row).join("")}</div>`) : emptyState(favOnly, q, apps.length)}</section>
     </div>`.s;
-
-    const inp = $("#q");
-    inp.addEventListener("input", debounce(() => { state.q = inp.value; const pos = inp.selectionStart; home(favOnly); const n = $("#q"); n.focus(); n.setSelectionRange(pos, pos); }, 180));
-    const qc = $("#qClear"); if (qc) qc.onclick = () => { state.q = ""; home(favOnly); };
     $$("[data-cat]").forEach((b) => b.onclick = () => { state.cat = b.dataset.cat; home(favOnly); });
-    bindCards(view);
   }
-  const mini = (a, upd) => html`<a class="mini glass" href="#/app/${encodeURIComponent(a.id)}">${appIcon(a)}<div class="info"><b>${a.name}</b><small>${upd ? "v" + a.version + " · " + ago(a.updated) : (a.category || "Genel") + " · " + ago(a.created)}</small></div></a>`;
   function emptyState(favOnly, q, total) {
-    if (favOnly) return html`<div class="empty glass"><div class="em">⭐</div><h3>Henüz favorin yok</h3><p>Bir uygulamanın yıldızına dokun, burada görünsün.</p></div>`;
-    if (q || state.cat !== "Tümü") return html`<div class="empty glass"><div class="em">🔍</div><h3>Sonuç bulunamadı</h3><p>Farklı bir arama ya da kategori dene.</p></div>`;
-    if (!total) return html`<div class="empty glass"><div class="em">📦</div><h3>Mağaza henüz boş</h3><p>Yeni uygulamalar eklendiğinde burada görünecek.</p></div>`;
+    if (favOnly) return html`<div class="empty"><div class="em">${raw(I.starO)}</div><h3>Henüz favorin yok</h3><p>Bir uygulamanın sayfasındaki yıldıza dokun, burada görünsün.</p></div>`;
+    if (q || state.cat !== "Tümü") return html`<div class="empty"><div class="em">${raw(I.search)}</div><h3>Sonuç bulunamadı</h3><p>Farklı bir arama ya da kategori dene.</p></div>`;
+    if (!total) return html`<div class="empty"><div class="em">${raw(I.grid)}</div><h3>Mağaza henüz boş</h3><p>Yeni uygulamalar eklendiğinde burada görünecek.</p></div>`;
     return "";
   }
-  function greeting() { const h = new Date().getHours(); return h < 6 ? "İyi geceler" : h < 12 ? "Günaydın" : h < 18 ? "İyi günler" : "İyi akşamlar"; }
   function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
+
+  /* ---------- YERİNDE VİDEO OYNATICI ----------
+     Puan Tablosu TV sekmesindeki oynatıcının (PTPlayer) görünümü; yalnızca burada gereken düğmeler var:
+     oynat/duraklat, 10 sn geri/ileri, ilerleme çubuğu, süre, ses. Tam ekran YOK: video sayfada olduğu yerde oynar. */
+  const fmtT = (s) => { s = Math.max(0, Math.floor(s || 0)); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
+  function playerHtml(m) {
+    return `<div class="ptp" data-player><div class="ptp-stage">
+      <video class="ptp-video" src="${UI.esc(m.src)}" ${m.poster ? `poster="${UI.esc(m.poster)}"` : ""} playsinline webkit-playsinline preload="metadata" disablepictureinpicture controlslist="nodownload nofullscreen noremoteplayback" x-webkit-airplay="deny"></video>
+      <div class="ptp-ov">
+        <div class="ptp-top"><span class="ptp-title">Tanıtım videosu</span></div>
+        <div class="ptp-mid"><button class="ptp-btn" data-p="rew" aria-label="10 saniye geri">${I.rew}</button><button class="ptp-btn ptp-play" data-p="play" aria-label="Oynat">${I.play}</button><button class="ptp-btn" data-p="fwd" aria-label="10 saniye ileri">${I.fwd}</button></div>
+        <div class="ptp-bot"><div class="ptp-seekwrap"><div class="ptp-buf"></div><input class="ptp-seek" type="range" min="0" max="1000" value="0" step="1" aria-label="İlerleme"></div>
+          <div class="ptp-row"><button class="ptp-btn" data-p="play2" aria-label="Oynat">${I.play}</button><button class="ptp-btn" data-p="mute" aria-label="Ses">${I.vol}</button><input class="ptp-vol" type="range" min="0" max="100" value="100" aria-label="Ses düzeyi"><span class="ptp-time">0:00 / 0:00</span></div></div>
+      </div><div class="ptp-spin" hidden></div></div></div>`;
+  }
+  function bindPlayer(root) {
+    const v = $("video", root), ov = $(".ptp-ov", root), seek = $(".ptp-seek", root), buf = $(".ptp-buf", root), vol = $(".ptp-vol", root), tm = $(".ptp-time", root), spin = $(".ptp-spin", root);
+    let hideT = 0, dragging = false;
+    const show = () => { ov.classList.remove("ptp-hide"); clearTimeout(hideT); if (!v.paused) hideT = setTimeout(() => ov.classList.add("ptp-hide"), 2600); };
+    const playIc = () => { const ic = v.paused ? I.play : I.pause; $('[data-p="play"]', root).innerHTML = ic; $('[data-p="play2"]', root).innerHTML = ic; };
+    const muteIc = () => { $('[data-p="mute"]', root).innerHTML = v.muted || v.volume === 0 ? I.mute : I.vol; };
+    const toggle = () => { if (v.paused) { $$("video", view).forEach((o) => o !== v && o.pause()); v.play().catch(() => {}); } else v.pause(); };
+    const time = () => { const d = v.duration || 0; tm.textContent = fmtT(v.currentTime) + " / " + fmtT(d); if (!dragging && d) seek.value = Math.round(v.currentTime / d * 1000);
+      try { if (d && v.buffered.length) buf.style.width = (v.buffered.end(v.buffered.length - 1) / d * 100) + "%"; } catch {} };
+    v.addEventListener("loadedmetadata", () => {
+      // Kutu videonun kendi oranını alır (dikey video dar, yatay video geniş): kırpma ya da büyütme olmaz
+      if (v.videoWidth && v.videoHeight) { root.style.setProperty("--ar", v.videoWidth + "/" + v.videoHeight); root.style.setProperty("--arn", (v.videoWidth / v.videoHeight).toFixed(4)); }
+      time();
+    });
+    v.addEventListener("timeupdate", time); v.addEventListener("progress", time);
+    v.addEventListener("play", () => { playIc(); show(); }); v.addEventListener("pause", () => { playIc(); show(); });
+    v.addEventListener("ended", () => { playIc(); show(); });
+    v.addEventListener("waiting", () => (spin.hidden = false)); v.addEventListener("playing", () => (spin.hidden = true)); v.addEventListener("canplay", () => (spin.hidden = true));
+    v.addEventListener("volumechange", () => { muteIc(); vol.value = v.muted ? 0 : Math.round(v.volume * 100); });
+    // Tam ekrana geçme girişimlerini engelle (çift dokunma, sistem denetimleri)
+    v.addEventListener("dblclick", (e) => e.preventDefault());
+    v.addEventListener("webkitbeginfullscreen", () => { try { v.webkitExitFullscreen(); } catch {} });
+    $(".ptp-stage", root).addEventListener("click", (e) => {
+      const b = e.target.closest("[data-p]");
+      if (!b) { if (e.target.closest(".ptp-seekwrap,.ptp-vol")) return; if (ov.classList.contains("ptp-hide")) show(); else toggle(); return; }
+      const p = b.dataset.p; show();
+      if (p === "play" || p === "play2") toggle();
+      else if (p === "rew") v.currentTime = Math.max(0, v.currentTime - 10);
+      else if (p === "fwd") v.currentTime = Math.min(v.duration || 0, v.currentTime + 10);
+      else if (p === "mute") { v.muted = !v.muted; if (!v.muted && v.volume === 0) v.volume = 1; }
+    });
+    seek.addEventListener("input", () => { dragging = true; const d = v.duration || 0; tm.textContent = fmtT(seek.value / 1000 * d) + " / " + fmtT(d); show(); });
+    seek.addEventListener("change", () => { const d = v.duration || 0; if (d) v.currentTime = seek.value / 1000 * d; dragging = false; });
+    vol.addEventListener("input", () => { v.volume = vol.value / 100; v.muted = +vol.value === 0; show(); });
+  }
 
   /* ---------- DETAY ---------- */
   function detail(id) {
     const a = byId(id);
-    if (!a) { view.innerHTML = html`<div class="view"><div class="empty glass" style="margin-top:24px"><div class="em">🫥</div><h3>Uygulama bulunamadı</h3><p>Kaldırılmış ya da gizlenmiş olabilir.</p><a class="btn ghost" style="margin-top:16px" href="#/">Mağazaya dön</a></div></div>`.s; return; }
-    const fav = D.user.favs().includes(a.id), upd = hasUpdate(a), r = a.requirements, b = betaOf(a), web = isWeb(a);
+    if (!a) { view.innerHTML = html`<div class="view"><div class="empty" style="margin-top:24px"><div class="em">${raw(I.search)}</div><h3>Uygulama bulunamadı</h3><p>Kaldırılmış ya da gizlenmiş olabilir.</p><a class="btn outline" style="margin-top:16px" href="#/">Mağazaya dön</a></div></div>`.s; return; }
+    document.body.classList.add("on-detail");
+    const fav = D.user.favs().includes(a.id), r = a.requirements, b = betaOf(a), web = isWeb(a);
     const cur = web ? a.webUrl : a.apkUrl;
     const media = [...(a.video ? [{ type: "video", src: a.video, poster: a.videoPoster }] : []), ...a.screenshots.map((s) => ({ type: "img", src: s }))];
-    const old = a.changelog.filter((c) => c.url && c.url !== cur && c.version !== a.version);
-    view.innerHTML = html`<div class="view">
-      <div class="d-cover">${a.cover ? html`<img src="${a.cover}" alt="" decoding="async">` : html`<div style="width:100%;height:100%;background:linear-gradient(135deg,${a.accent},#07070c)"></div>`}
-        <button class="icon-btn back" id="backBtn" aria-label="Geri">${raw(I.back)}</button>
-        <div class="cover-acts"><button class="icon-btn ${fav ? "on" : ""}" id="favBig" aria-label="Favori">${raw(fav ? I.star : I.starO)}</button><button class="icon-btn" id="shareBig" aria-label="Paylaş">${raw(I.share)}</button></div></div>
-      <div class="d-head">${appIcon(a)}<div style="min-width:0"><h1>${a.name}</h1><div class="cat">${a.category || "Genel"} · v${a.version}${web ? " · Web" : ""}</div></div></div>
-      <div class="d-stats glass">
-        <div><b>${a.version}</b><span>sürüm</span></div>
+    view.innerHTML = html`<div class="view detail">
+      <div class="d-bar"><button class="icon-btn" id="backBtn" aria-label="Geri">${raw(I.back)}</button><span class="sp"></span>
+        <button class="icon-btn ${fav ? "on" : ""}" id="favBig" aria-label="Favori">${raw(fav ? I.star : I.starO)}</button><button class="icon-btn" id="shareBig" aria-label="Paylaş">${raw(I.share)}</button></div>
+      <div class="d-head">${appIcon(a)}<div class="d-ttl"><h1>${a.name}</h1><a class="dev" href="#/">${devName(a)}</a>
+        <small>${raw([a.adminOnly ? "Yalnızca yönetici" : "", web ? "Web uygulaması" : "", "Sürüm " + UI.esc(a.version)].filter(Boolean).join(" · "))}</small></div></div>
+      <div class="d-stats">
+        <div><b id="rateStat">—</b><span id="rateN">puan yok</span></div>
         <div><b data-size="${a.id}">${sizeOf(a)}</b><span>${web ? "tür" : "boyut"}</span></div>
-        <div><b id="rateStat">—</b><span>puan</span></div>
-        <div><b data-dl="${a.id}">${web ? "—" : fmtNum(downloadsOf(a))}</b><span>indirme</span></div>
+        ${web ? "" : html`<div><b data-dl="${a.id}">${fmtNum(downloadsOf(a))}</b><span>indirme</span></div>`}
+        <div><b>${web ? "Tarayıcı" : a.minAndroid ? a.minAndroid + "+" : "—"}</b><span>${web ? "açılır" : "Android"}</span></div>
       </div>
       <div class="d-cta" data-cta="detail" data-id="${a.id}">${raw(ctaHtml(a, "detail"))}</div>
-      ${b ? html`<div class="beta-box"><b>🧪 Test sürümü v${b.version}</b><span class="badge beta" style="margin-left:6px">SADECE TESTÇİLER</span>
-          <p>${fmtDate(b.updated)}</p>
-          ${b.notes.length ? html`<ul style="margin:0 0 10px;padding-left:18px;font-size:13.5px">${b.notes.map((n) => html`<li>${n}</li>`)}</ul>` : ""}
-          <button class="btn ghost block" id="betaDl">${raw(b.webUrl ? I.open : I.dl)}Test sürümünü ${b.webUrl ? "aç" : "indir"}</button></div>` : ""}
-      ${a.whatsNew.length ? html`<section class="block"><div class="whats"><b>Bu sürümde yenilikler</b> <small style="color:var(--mut)">· ${fmtDate(a.updated)}</small><ul>${a.whatsNew.map((x) => html`<li>${x}</li>`)}</ul></div></section>` : ""}
-      ${media.length ? html`<section class="block"><h2>${a.video ? "Video ve ekran görüntüleri" : "Ekran görüntüleri"}</h2><div class="gallery">${media.map((m, i) => m.type === "video"
-        ? html`<button data-shot="${i}" class="vid" aria-label="Videoyu oynat">${m.poster ? html`<img src="${m.poster}" alt="" loading="lazy" decoding="async">` : html`<video src="${m.src}#t=0.5" preload="metadata" muted playsinline></video>`}<span class="play">${raw(I.play)}</span></button>`
-        : html`<button data-shot="${i}"><img src="${m.src}" alt="Ekran görüntüsü ${i}" loading="lazy" decoding="async"></button>`)}</div></section>` : ""}
-      <section class="block"><h2>Hakkında</h2><p class="lead">${a.description || a.short}</p></section>
-      ${a.features.length ? html`<section class="block"><h2>Özellikler</h2><ul class="feat-list">${a.features.map((f) => html`<li>${f}</li>`)}</ul></section>` : ""}
-      <section class="block" id="reviewsBlock"><h2>Puan ve yorumlar</h2><div id="reviews"><div class="sk" style="height:90px;border-radius:22px"></div></div></section>
-      ${a.changelog.length ? html`<section class="block"><h2>Sürüm geçmişi</h2><div class="timeline">${a.changelog.map((c, i) => html`<div class="tl"><b>v${c.version}</b><small>${fmtDate(c.date)}</small>${c.notes.length ? html`<ul>${c.notes.map((n) => html`<li>${n}</li>`)}</ul>` : ""}${c.url && c.url !== cur && c.version !== a.version ? html`<button class="old" data-old="${i}">${raw(I.dl)}Bu sürümü indir</button>` : ""}</div>`)}</div></section>` : ""}
-      ${a.knownIssues.length ? html`<section class="block"><h2>Bilinen hatalar</h2><div class="note warn"><ul>${a.knownIssues.map((k) => html`<li>${k}</li>`)}</ul></div></section>` : ""}
-      <section class="block"><h2>Bir sorun mu var?</h2><div class="rowbtns" style="margin-top:0"><button class="btn ghost" id="reportBtn">🐞 Hata bildir</button></div></section>
-      ${web ? "" : html`<section class="block"><h2>Sistem gereksinimleri</h2><div class="kv">
+      ${b ? raw(betaNote(a, "big")) : ""}
+      ${media.length ? html`<div class="gallery">${raw(media.map((m, i) => m.type === "video" ? playerHtml(m) : `<div class="shot"><img src="${UI.esc(m.src)}" alt="Ekran görüntüsü ${i}" loading="lazy" decoding="async"></div>`).join(""))}</div>` : ""}
+      <section class="block"><a class="block-h" href="javascript:void 0" id="aboutH"><h2>Bu uygulama hakkında</h2>${raw(I.arrow)}</a>
+        <p class="lead clamp" id="about">${a.description || a.short}</p>
+        ${a.features.length ? html`<div class="feat">${a.features.map((f) => html`<span>${f}</span>`)}</div>` : ""}
+        ${a.category ? html`<div class="feat cat"><span>${a.category}</span></div>` : ""}</section>
+      ${a.whatsNew.length ? html`<section class="block"><div class="block-h"><h2>Yenilikler</h2></div><small class="muted">${fmtDate(a.updated)}</small><ul class="whats">${a.whatsNew.map((x) => html`<li>${x}</li>`)}</ul></section>` : ""}
+      ${b ? html`<section class="block"><div class="block-h"><h2>Test sürümü</h2></div><div class="beta-card"><div><b>Sürüm ${b.version}</b><small>${fmtDate(b.updated)} · yalnızca site üzerinden açılır</small></div>
+        ${b.notes.length ? html`<ul>${b.notes.map((n) => html`<li>${n}</li>`)}</ul>` : ""}<button class="btn outline block" data-beta="${a.id}">${raw(I.open)}<span>Test sürümünü sitede aç</span></button></div></section>` : ""}
+      <section class="block" id="reviewsBlock"><div class="block-h"><h2>Puan ve yorumlar</h2></div><div id="reviews"><div class="sk" style="height:90px;border-radius:16px"></div></div></section>
+      ${a.knownIssues.length ? html`<section class="block"><div class="block-h"><h2>Bilinen hatalar</h2></div><ul class="whats warn">${a.knownIssues.map((k) => html`<li>${k}</li>`)}</ul></section>` : ""}
+      ${a.changelog.length ? html`<section class="block"><div class="block-h"><h2>Sürüm geçmişi</h2></div><div class="timeline">${a.changelog.map((c, i) => html`<div class="tl"><b>Sürüm ${c.version}</b><small>${fmtDate(c.date)}</small>${c.notes.length ? html`<ul>${c.notes.map((n) => html`<li>${n}</li>`)}</ul>` : ""}${c.url && c.url !== cur && c.version !== a.version ? html`<button class="old" data-old="${i}">${raw(I.dl)}Bu sürümü indir</button>` : ""}</div>`)}</div></section>` : ""}
+      ${web ? "" : html`<section class="block"><div class="block-h"><h2>Uygulama bilgileri</h2></div><div class="kv">
+        <div><span>Sürüm</span><b>${a.version}</b></div>
+        <div><span>Güncellendi</span><b>${fmtDate(a.updated)}</b></div>
         <div><span>Android</span><b>${r.android || (a.minAndroid ? a.minAndroid + " ve üzeri" : "—")}</b></div>
-        <div><span>RAM</span><b>${r.ram || "—"}</b></div>
-        <div><span>Depolama</span><b>${r.storage || "—"}</b></div>
+        ${r.ram ? html`<div><span>RAM</span><b>${r.ram}</b></div>` : ""}${r.storage ? html`<div><span>Depolama</span><b>${r.storage}</b></div>` : ""}
         <div><span>İzinler</span><b>${r.permissions.length ? r.permissions.join(", ") : "Özel izin yok"}</b></div>
+        <div><span>Geliştirici</span><b>${devName(a)}</b></div>
       </div></section>`}
-      <section class="block" style="margin-bottom:12px"><button class="btn primary xl block" id="dlBottom" data-dl-btn="${a.id}" data-long="1">${raw(action(a).icon)}<span>${web ? a.name + " aç" : action(a).label === "Aç" ? a.name + " aç" : a.name + " · " + action(a).label.toLocaleLowerCase("tr") + " · " + sizeOf(a)}</span></button></section>
+      <section class="block"><button class="link-row" id="reportBtn">${raw(I.info)}<span>Hata bildir</span>${raw(I.arrow)}</button></section>
     </div>`.s;
     $("#backBtn").onclick = () => (history.length > 1 ? history.back() : (location.hash = "#/"));
-    $("#dlBottom").onclick = () => download(a);
-    if (b) $("#betaDl").onclick = () => download(a, { url: b.webUrl || b.apkUrl, version: b.version, beta: true });
     $$("[data-old]").forEach((x) => x.onclick = () => { const c = a.changelog[+x.dataset.old]; download(a, { url: c.url, version: c.version, old: true }); });
     $("#favBig").onclick = (e) => { const on = D.user.toggleFav(a.id); const bt = e.currentTarget; bt.classList.toggle("on", on); bt.innerHTML = on ? I.star : I.starO; toast(on ? "Favorilere eklendi" : "Favorilerden çıkarıldı", on ? "ok" : "info", 1600); };
     $("#shareBig").onclick = () => shareSheet(a.name, appUrl(a));
     $("#reportBtn").onclick = () => reportDialog(a);
-    $$("[data-shot]").forEach((x) => x.onclick = () => lightbox(media, +x.dataset.shot));
+    const ab = $("#about"); $("#aboutH").onclick = () => ab.classList.toggle("clamp");
+    $$("[data-player]", view).forEach(bindPlayer);
     refreshStats(a);
     loadReviews(a);
     scrollTo(0, 0);
@@ -305,10 +333,11 @@
     const all = state.reviews[a.id] || {}, mine = all[FB.uid];
     const list = Object.entries(all).map(([uid, x]) => Object.assign({ uid }, x)).sort((x, y) => (y.t || 0) - (x.t || 0));
     const r = rating(a.id);
-    $("#rateStat").textContent = r ? r.avg.toFixed(1).replace(".", ",") + " ★" : "—";
-    box.innerHTML = html`${r ? html`<div class="rate-sum glass"><div class="avg">${r.avg.toFixed(1).replace(".", ",")}</div><div>${raw(starsHtml(r.avg))}<br><small>${r.n} değerlendirme</small></div></div>` : html`<p class="help" style="margin:0;color:var(--mut)">Henüz değerlendirme yok. İlk puanı sen ver!</p>`}
-      <div class="rowbtns"><button class="btn ${mine ? "ghost" : "primary"}" id="rateBtn">${raw(I.starO)}${mine ? "Yorumunu düzenle" : "Puan ver ve yorum yaz"}</button></div>
-      ${list.map((x) => html`<div class="review"><div class="h">${raw(starsHtml(x.stars))}<b>${x.name || "Davetli"}${x.uid === FB.uid ? " (sen)" : ""}</b><small>${x.v ? "v" + x.v + " · " : ""}${x.t ? ago(x.t) : ""}</small></div>${x.text ? html`<p>${x.text}</p>` : ""}</div>`)}`.s;
+    $("#rateStat").textContent = r ? comma(r.avg) + " ★" : "—"; $("#rateN").textContent = r ? r.n + " yorum" : "puan yok";
+    const bars = [5, 4, 3, 2, 1].map((s) => { const n = list.filter((x) => Math.round(x.stars) === s).length; return `<div class="bar"><span>${s}</span><i><b style="width:${r ? (n / r.n * 100) : 0}%"></b></i></div>`; }).join("");
+    box.innerHTML = html`${r ? html`<div class="rate-sum"><div class="avg"><b>${comma(r.avg)}</b>${raw(starsHtml(r.avg))}<small>${r.n} yorum</small></div><div class="bars">${raw(bars)}</div></div>` : html`<p class="muted" style="margin:0">Henüz değerlendirme yok. İlk puanı sen ver.</p>`}
+      <button class="btn outline block" id="rateBtn" style="margin-top:14px">${raw(I.starO)}<span>${mine ? "Yorumunu düzenle" : "Puan ver ve yorum yaz"}</span></button>
+      ${list.map((x) => html`<div class="review"><div class="h"><span class="av">${(x.name || "D").slice(0, 1)}</span><b>${x.name || "Davetli"}${x.uid === FB.uid ? " (sen)" : ""}</b></div><div class="h2">${raw(starsHtml(x.stars))}<small>${x.t ? fmtDate(x.t) : ""}${x.v ? " · sürüm " + x.v : ""}</small></div>${x.text ? html`<p>${x.text}</p>` : ""}</div>`)}`.s;
     $("#rateBtn").onclick = () => rateDialog(a, mine);
   }
   function rateDialog(a, mine) {
@@ -331,7 +360,7 @@
   /* ---------- hata bildir ---------- */
   function reportDialog(a) {
     let shot = "";
-    const m = modal(`<h3>Hata bildir · ${UI.esc(a.name)}</h3><p>Ne oldu? Ne yaparken oldu? Ne kadar açık yazarsan o kadar hızlı düzelir.</p>
+    const m = modal(`<h3>Hata bildir · ${UI.esc(a.name)}</h3><p>Ne oldu? Ne yaparken oldu?</p>
       <label class="field"><span>Açıklama *</span><textarea class="inp" id="rpt" maxlength="2000" placeholder="Örn. 3. bölümde zıplayınca oyun donuyor."></textarea></label>
       <label class="drop" style="margin-bottom:14px"><input type="file" accept="image/*" id="rps"><div class="pv">${I.image}</div><div><b>Ekran görüntüsü ekle</b><small>İsteğe bağlı</small></div></label>
       <div id="rpv"></div>
@@ -348,32 +377,24 @@
     };
   }
 
-  function lightbox(list, i) {
-    const lb = document.createElement("div"); lb.className = "lightbox";
-    const draw = () => { const m = list[i]; lb.innerHTML = (m.type === "video" ? `<video src="${UI.esc(m.src)}" controls autoplay playsinline${m.poster ? ` poster="${UI.esc(m.poster)}"` : ""}></video>` : `<img src="${UI.esc(m.src)}" alt="">`) + `<button class="icon-btn" data-x aria-label="Kapat">${I.x}</button>${list.length > 1 ? `<button class="icon-btn nav l" data-p>${I.back}</button><button class="icon-btn nav r" data-n style="transform:translateY(-50%) rotate(180deg)">${I.back}</button>` : ""}`; };
-    draw(); document.body.append(lb);
-    lb.addEventListener("click", (e) => { const t = e.target.closest("button"); if (!t) { if (e.target === lb) lb.remove(); return; }
-      if (t.hasAttribute("data-x")) lb.remove(); if (t.hasAttribute("data-p")) { i = (i - 1 + list.length) % list.length; draw(); } if (t.hasAttribute("data-n")) { i = (i + 1) % list.length; draw(); } });
-    let sx = 0; lb.addEventListener("touchstart", (e) => (sx = e.touches[0].clientX), { passive: true });
-    lb.addEventListener("touchend", (e) => { const d = e.changedTouches[0].clientX - sx; if (Math.abs(d) > 50 && list.length > 1) { i = (i + (d < 0 ? 1 : -1) + list.length) % list.length; draw(); } });
-  }
-
   /* ---------- bildirimler ---------- */
-  function unread() { const s = D.user.inboxSeen(); return state.inbox.filter((x) => (x.t || 0) > s).length; }
-  function drawBell() { const n = unread(), d = $("#bellDot"); d.textContent = n > 9 ? "9+" : n; d.classList.toggle("hidden", !n); }
+  // (2026-11-27) "Yeni uygulama eklendi" duyuruları gösterilmez (eski kayıtlar dahil)
+  const shownInbox = () => state.inbox.filter((x) => !/^Yeni uygulama\b/i.test(x.title || "") && !(x.app && !byId(x.app)));
+  function unread() { const s = D.user.inboxSeen(); return shownInbox().filter((x) => (x.t || 0) > s).length; }
+  function drawBell() { const n = unread(); [$("#bellDot"), $("#tabBellDot")].forEach((d) => { if (!d) return; d.textContent = n > 9 ? "9+" : n; d.classList.toggle("hidden", !n); }); }
   async function loadInbox() {
     try { const v = (await FB.get("inbox")) || {}; state.inbox = Object.values(v).filter(Boolean).sort((x, y) => (y.t || 0) - (x.t || 0)).slice(0, 60); } catch { state.inbox = []; }
     drawBell();
   }
   function inbox() {
-    const seen = D.user.inboxSeen();
+    const seen = D.user.inboxSeen(), items = shownInbox();
     const perm = "Notification" in window ? Notification.permission : "unsupported";
-    view.innerHTML = html`<div class="view"><section class="hero glass"><div class="hi">BİLDİRİMLER</div><h1><span>Neler yeni?</span></h1><p>Yeni uygulamalar, güncellemeler ve duyurular.</p>
-      ${perm === "granted" && localStorage.getItem("um.pushOn") ? html`<p style="margin-top:12px;color:var(--ok);font-weight:700;font-size:14px">✓ Telefon bildirimleri açık</p>` : perm === "unsupported" ? "" : html`<button class="btn primary" style="margin-top:14px" id="pushOn">${raw(I.bell)}Telefon bildirimlerini aç</button>`}</section>
-      <section class="sec">${state.inbox.length ? state.inbox.map((x) => { const a = x.app && byId(x.app); return html`<a class="inbox-item ${x.t > seen ? "new" : ""}" href="${a ? "#/app/" + encodeURIComponent(a.id) : "#/bildirimler"}">${a ? appIcon(a) : raw('<div class="ic" style="width:42px;height:42px"><div class="ph" style="font-size:18px">📣</div></div>')}<div class="t"><b>${x.title}</b>${x.body ? html`<span>${x.body}</span>` : ""}<small>${x.t ? ago(x.t) : ""}</small></div></a>`; })
-        : html`<div class="empty glass"><div class="em">🔔</div><h3>Henüz bildirim yok</h3><p>Yeni bir uygulama ya da güncelleme olunca burada görünecek.</p></div>`}</section></div>`.s;
+    view.innerHTML = html`<div class="view"><h1 class="page-h">Bildirimler</h1>
+      ${perm === "granted" && localStorage.getItem("um.pushOn") ? "" : perm === "unsupported" ? "" : html`<button class="btn outline block" style="margin-bottom:14px" id="pushOn">${raw(I.bell)}<span>Telefon bildirimlerini aç</span></button>`}
+      ${items.length ? raw(`<div class="list">${items.map((x) => { const a = x.app && byId(x.app); return html`<a class="inbox-item ${x.t > seen ? "new" : ""}" href="${a ? "#/app/" + encodeURIComponent(a.id) : "#/bildirimler"}">${a ? appIcon(a) : raw('<div class="ic"><div class="ph">' + I.bell + "</div></div>")}<div class="t"><b>${x.title}</b>${x.body ? html`<span>${x.body}</span>` : ""}<small>${x.t ? ago(x.t) : ""}</small></div></a>`.s; }).join("")}</div>`)
+        : html`<div class="empty"><div class="em">${raw(I.bell)}</div><h3>Henüz bildirim yok</h3><p>Uygulamalarına güncelleme gelince burada görünecek.</p></div>`}</div>`.s;
     const pb = $("#pushOn"); if (pb) pb.onclick = enablePush;
-    if (state.inbox.length) { D.user.setInboxSeen(Math.max(...state.inbox.map((x) => x.t || 0))); drawBell(); }
+    if (items.length) { D.user.setInboxSeen(Math.max(...items.map((x) => x.t || 0))); drawBell(); }
   }
   async function enablePush() {
     try {
@@ -391,11 +412,11 @@
 
   /* ---------- özel erişim ---------- */
   function gate(msg) {
-    $("#tabbar").classList.add("hidden"); $("#bell").classList.add("hidden"); $("#shareStore").classList.add("hidden");
-    view.innerHTML = html`<div class="gate view"><div class="box glass"><div class="lock">🔒</div><h2 style="margin:0 0 8px">Bu mağaza özeldir</h2>
-      <p style="color:var(--mut);margin:0 0 18px">${msg || "Uygulamaları görmek için sana gönderilen davet bağlantısını aç ya da davet kodunu gir."}</p>
-      <input class="inp" id="code" placeholder="Davet kodu" autocomplete="off" autocapitalize="none" spellcheck="false"><button class="btn primary block" style="margin-top:10px" id="codeBtn">Giriş</button>
-      ${!Y && isAndroid ? html`<a class="btn ghost block" style="margin-top:10px" href="${appLink()}">${raw(I.open)}Uygulama Merkezi uygulamasında aç</a>` : ""}</div></div>`.s;
+    document.body.classList.add("gated");
+    view.innerHTML = html`<div class="gate view"><div class="box"><div class="logo big">${raw(I.logo)}</div><h2>Bu mağaza özeldir</h2>
+      <p>${msg || "Uygulamaları görmek için sana gönderilen davet bağlantısını aç ya da davet kodunu gir."}</p>
+      <input class="inp" id="code" placeholder="Davet kodu" autocomplete="off" autocapitalize="none" spellcheck="false"><button class="btn primary block" style="margin-top:10px" id="codeBtn"><span>Giriş</span></button>
+      ${!Y && isAndroid ? html`<a class="btn outline block" style="margin-top:10px" href="${appLink()}">${raw(I.open)}<span>Uygulama Merkezi uygulamasında aç</span></a>` : ""}</div></div>`.s;
     const go = async () => {
       UI.loading(true, "Kontrol ediliyor…");
       try { await D.member.claim($("#code").value); UI.loading(false); toast("Hoş geldin!", "ok"); start(); }
@@ -405,12 +426,26 @@
   }
 
   /* ---------- yönlendirme ---------- */
+  /* Mağazada bulunmayan paket: yalnızca yöneticiye açık bir uygulamaysa (sürüm dosyasında "yonetici" işaretli) güncellemesi
+     Yönetim uygulamasından yapılır; o uygulama kuruluysa açılır, değilse kimseye bir şey gösterilmez. */
+  async function unknownPackage(pk) {
+    location.replace("#/");
+    try {
+      const j = await (await fetch((C.rootUrl || C.siteUrl) + C.versionsPath + "?t=" + Date.now(), { cache: "no-store" })).json();
+      const e = Object.values((j && j.apps) || {}).find((x) => x && x.paket === pk);
+      if (e && e.yonetici) {
+        if (Y) { let i = {}; try { i = JSON.parse(Y.bilgi(ADMIN_PKG)); } catch {} if (i.kurulu && Y.ac(ADMIN_PKG)) return; }
+        return toast("Bu uygulama yalnızca yöneticiye açık", "info", 3500);
+      }
+    } catch {}
+    toast("Bu uygulama henüz mağazada yok", "warn", 3500);
+  }
   function render() {
     if (!state.db) return;
-    $("#tabbar").classList.remove("hidden"); $("#bell").classList.remove("hidden"); $("#shareStore").classList.remove("hidden");
+    document.body.classList.remove("gated", "on-detail");
     const h = location.hash || "#/";
-    $$("#tabbar a").forEach((a) => a.classList.toggle("on", h.startsWith("#/app/") || h.startsWith("#/bildirimler") ? false : (a.dataset.tab === "fav") === h.startsWith("#/favoriler")));
-    if (h.startsWith("#/paket/")) { const pk = decodeURIComponent(h.slice(8)), a = visibleApps().find((x) => x.paket === pk); if (a) { location.replace("#/app/" + encodeURIComponent(a.id)); return; } toast("Bu uygulama henüz mağazada yok", "warn", 3500); location.replace("#/"); return; }
+    $$("#tabbar a").forEach((a) => a.classList.toggle("on", (a.dataset.tab === "fav" && h.startsWith("#/favoriler")) || (a.dataset.tab === "bell" && h.startsWith("#/bildirimler")) || (a.dataset.tab === "home" && !/^#\/(favoriler|bildirimler|app\/)/.test(h))));
+    if (h.startsWith("#/paket/")) { const pk = decodeURIComponent(h.slice(8)), a = visibleApps().find((x) => pkgs(x).includes(pk)); if (a) { location.replace("#/app/" + encodeURIComponent(a.id)); return; } unknownPackage(pk); return; }
     if (h.startsWith("#/app/")) detail(decodeURIComponent(h.slice(6)));
     else if (h.startsWith("#/favoriler")) home(true);
     else if (h.startsWith("#/bildirimler")) inbox();
@@ -418,60 +453,66 @@
   }
   addEventListener("hashchange", () => { render(); if (!location.hash.startsWith("#/app/")) scrollTo(0, 0); });
 
-  /* ---------- güncelleme bildirimi ---------- */
+  /* ---------- güncelleme bildirimi (yalnızca kullanıcının kurulu uygulamaları) ---------- */
   function notifyUpdates() {
-    const apps = visibleApps(); const ups = apps.filter(hasUpdate);
-    if (ups.length) toast(ups.length === 1 ? `${ups[0].name} için yeni sürüm var: v${ups[0].version}` : `${ups.length} uygulamada güncelleme var`, "warn", 4200);
-    const seen = D.user.seen(); const fresh = apps.filter((a) => seen.__init && !(a.id in seen));
-    if (fresh.length) setTimeout(() => toast(fresh.length === 1 ? `Yeni uygulama: ${fresh[0].name}` : `${fresh.length} yeni uygulama eklendi`, "info", 4000), 900);
-    const map = { __init: 1 }; apps.forEach((a) => (map[a.id] = a.version)); D.user.markSeen(map);
+    const ups = visibleApps().filter(hasUpdate);
+    if (ups.length) toast(ups.length === 1 ? `${ups[0].name} için güncelleme var` : `${ups.length} uygulamada güncelleme var`, "warn", 4200);
   }
+
+  /* ---------- arama (üst çubuk) ---------- */
+  const qi = $("#q");
+  qi.addEventListener("input", debounce(() => { state.q = qi.value; $("#qClear").classList.toggle("hidden", !qi.value); if (!state.db) return; if (location.hash.startsWith("#/app/") || location.hash.startsWith("#/bildirimler")) { location.hash = "#/"; return; } home(location.hash.startsWith("#/favoriler")); }, 160));
+  $("#qClear").innerHTML = I.x; $("#qClear").onclick = () => { qi.value = ""; state.q = ""; $("#qClear").classList.add("hidden"); if (state.db) render(); };
 
   /* ---------- başlangıç ---------- */
   async function start() {
     skeleton();
     try {
-      // Mağaza sahibi (yönetici hesabıyla aynı tarayıcıda) mağazayı davetsiz, testçi gibi görür
-      const isOwner = !FB.isAnon() && (await FB.get("owner").catch(() => null)) === FB.uid;
-      const inv = isOwner ? { code: "sahip", name: "", active: true, beta: true, owner: true } : await D.member.invite();
+      // Mağaza sahibi (yönetici hesabıyla aynı tarayıcıda) mağazayı davetsiz görür; yalnızca yönetici uygulamaları da görünür
+      const owner = !FB.isAnon() && (await FB.get("owner").catch(() => null)) === FB.uid;
+      const inv = owner ? { code: "sahip", name: "", active: true, beta: true, owner: true } : await D.member.invite();
       if (!inv || inv.active !== true) { if (inv) localStorage.removeItem("um.invite"); return gate(inv ? "Davetin iptal edilmiş. Mağaza sahibinden yeni bir davet iste." : ""); }
       state.invite = inv;
       let r;
       try { r = await D.loadCatalog(); }
       catch (e) { if (e.code === "denied") { localStorage.removeItem("um.invite"); return gate("Davetin artık geçerli değil. Mağaza sahibinden yeni bir davet iste."); } throw e; }
       state.db = r.db; state.offline = r.offline;
-      if (inv.beta) state.beta = await D.loadBeta();
+      if (owner) state.ozel = await D.loadOzel();
+      state.dev = (await D.loadDevApps()).filter((a) => !state.db.apps.some((x) => x.id === a.id));
+      state.beta = await D.loadBeta(inv);
       $("#storeName").textContent = r.db.store.name; document.title = r.db.store.name;
       render();
-      if (!inv.owner) D.member.touch(inv);
+      if (!owner) D.member.touch(inv);
       loadAllStats(); notifyUpdates(); loadInbox(); setTimeout(storeSelfUpdate, 2500);
-      // Paket adı girilmemiş uygulamalar: tahmin et (kurulu mu / güncel mi anlaşılsın)
-      visibleApps().filter((a) => !a.paket && a.kind !== "web").forEach(async (a) => { const pk = await D.guessPackage(a); if (pk) { a.paket = pk; refreshButtons(a.id); } });
-      FB.get("reviews").then((v) => { state.reviews = v || {}; if (!location.hash.startsWith("#/app/") && !location.hash.startsWith("#/bildirimler")) render(); }).catch(() => {});
+      // Paket adı girilmemiş uygulamalar: depodaki paket adlarından aday çıkar, telefonda hangisi kuruluysa o sayılır
+      visibleApps().filter((a) => !D.pkgsOf(a).length && !isWeb(a)).forEach(async (a) => {
+        const pk = await D.guessPackage(a); let c = pk ? [pk] : [];
+        if (!c.length) { const p = D.parseRelease(a.apkUrl); if (p) c = await D.packagesOf(p.owner, p.repo); }
+        if (c.length) { state.cands[a.id] = c; refreshButtons(a.id); }
+      });
+      FB.get("reviews").then((v) => { state.reviews = v || {}; if (!/^#\/(app\/|bildirimler)/.test(location.hash)) render(); }).catch(() => {});
       if (r.offline) toast("Çevrimdışısın · son kaydedilen liste gösteriliyor", "warn", 3500);
     } catch (e) {
-      view.innerHTML = html`<div class="empty glass" style="margin-top:24px"><div class="em">📡</div><h3>Mağaza yüklenemedi</h3><p>${e.message}</p><button class="btn primary" style="margin-top:16px" onclick="location.reload()">Tekrar dene</button></div>`.s;
+      view.innerHTML = html`<div class="empty" style="margin-top:24px"><div class="em">${raw(I.cloud)}</div><h3>Mağaza yüklenemedi</h3><p>${e.message}</p><button class="btn primary" style="margin-top:16px" onclick="location.reload()"><span>Tekrar dene</span></button></div>`.s;
     }
   }
   async function boot() {
     skeleton();
     try {
       await FB.init({ anon: true });
-      // davet bağlantısı: ?d=<kod> (eski ?k= bağlantıları artık geçersiz)
       const params = new URLSearchParams(location.search); const code = params.get("d");
       if (code || params.has("k")) history.replaceState(null, "", location.pathname + location.hash);
       if (code) { try { await D.member.claim(code); toast("Davet kabul edildi · hoş geldin!", "ok"); } catch (e) { toast(e.message, "err", 4000); } }
       await start();
     } catch (e) {
-      view.innerHTML = html`<div class="empty glass" style="margin-top:24px"><div class="em">📡</div><h3>Mağaza yüklenemedi</h3><p>${e.message}</p><button class="btn primary" style="margin-top:16px" onclick="location.reload()">Tekrar dene</button></div>`.s;
+      view.innerHTML = html`<div class="empty" style="margin-top:24px"><div class="em">${raw(I.cloud)}</div><h3>Mağaza yüklenemedi</h3><p>${e.message}</p><button class="btn primary" style="margin-top:16px" onclick="location.reload()"><span>Tekrar dene</span></button></div>`.s;
     } finally { setTimeout(() => $("#splash").classList.add("done"), 250); }
     $("#shareStore").onclick = () => { if (!state.db) return; shareSheet(state.db.store.name, C.siteUrl); };
     $("#bell").onclick = () => (location.hash = "#/bildirimler");
   }
   boot();
 
-  if ("serviceWorker" in navigator && location.protocol === "https:") {
-    // Yeni service worker devraldığında sayfayı bir kez yenile: yeni düzen hemen görünsün
+  if ("serviceWorker" in navigator && location.protocol === "https:" && !/\/test\//.test(location.pathname)) {
     const hadController = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadController && !sessionStorage.getItem("um.swReload")) { sessionStorage.setItem("um.swReload", "1"); location.reload(); } });
     navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then((r) => r.update()).catch(() => {});

@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow,noarchive,nosnippet,noimageindex">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#131314" media="(prefers-color-scheme: dark)">
+<title>Geliştirici · Uygulama Merkezi</title>
+<link rel="icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="css/play.css">
+<style>
+.dev .shell{max-width:760px;padding:calc(72px + var(--safe-t)) 16px calc(40px + var(--safe-b))}
+.dev .topbar{position:fixed;left:0;right:0;top:0;margin:0;padding:calc(8px + var(--safe-t)) 16px 8px;background:var(--bg);border-bottom:1px solid var(--line);z-index:40}
+.dev .topbar .brand small{font-weight:400;color:var(--mut);font-size:13px;margin-left:6px}
+.dev .form-bar{position:sticky;bottom:calc(10px + var(--safe-b));z-index:25;display:flex;gap:10px;padding:10px;border-radius:20px;margin-top:6px;background:var(--surf);border:1px solid var(--line);box-shadow:var(--shadow)}
+.dev .form-bar .btn{flex:1}
+.dev .app-row{border-bottom:1px solid var(--line)}
+.dev .note.rej{background:var(--bad-soft);color:var(--bad)}
+</style>
+</head>
+<body class="dev">
+<header class="topbar"><div class="tb-in"><a class="brand" href="#/"><span class="logo" id="logoMark"></span><span>Uygulama Merkezi<small>Geliştirici</small></span></a><span class="sp" style="flex:1"></span><span id="who" class="muted" style="font-size:13px"></span></div></header>
+<div class="shell"><main id="view"></main></div>
+<script src="js/config.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/fb.js"></script>
+<script src="js/data.js"></script>
+<script src="js/gelistirici.js"></script>
+</body>
+</html>

@@ -40,7 +40,11 @@
       whatsNew: list(a.whatsNew), knownIssues: list(a.knownIssues),
       changelog: arr(a.changelog).map((c) => ({ version: String(c.version || ""), date: c.date || "", notes: list(c.notes), url: c.url || "" })),
       requirements: Object.assign({ android: "", ram: "", storage: "" }, a.requirements || {}, { permissions: list((a.requirements || {}).permissions) }),
-      hidden: !!a.hidden, featured: !!a.featured, accent: a.accent || "#7c5cff",
+      hidden: !!a.hidden, featured: !!a.featured, accent: a.accent || "#01875f",
+      // Sadece yönetici: herkese açık katalogda, bildirimlerde ve duyurularda yer almaz; yalnızca sahip görür (um/ozel)
+      adminOnly: !!a.adminOnly,
+      // Geliştirici başvurusundan geldiyse: geliştirici kodu ve görünen adı
+      dev: a.dev || "", devId: a.devId || "", devName: a.devName || "",
       beta: normBeta(a.beta)
     };
   }
@@ -54,6 +58,8 @@
     };
   }
   const linkOf = (a) => (a.kind === "web" ? a.webUrl : a.apkUrl);
+  // Bir uygulamanın Android paket adları ("com.a.x, com.a.y" yazılabilir: aynı uygulamanın farklı paketleri)
+  const pkgsOf = (a) => String((a && a.paket) || "").split(/[\s,;]+/).map((x) => x.trim()).filter((x) => /^[A-Za-z][\w.]+$/.test(x));
 
   /* ---------- UTF-8 güvenli base64 ---------- */
   function b64FromText(t) { const bytes = new TextEncoder().encode(t); let s = ""; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(s); }
@@ -119,7 +125,19 @@
       const c = LS.get(CACHE_KEY, null); if (c) return { db: normalize(c), offline: true }; throw e;
     }
   }
-  async function loadBeta() { try { const b = (await FB.get("beta")) || {}; const out = {}; Object.keys(b).forEach((k) => { const n = normBeta(b[k]); if (n) out[k] = n; }); return out; } catch { return {}; } }
+  /* Test sürümleri: yönetici bir kişiye uygulama uygulama test erişimi açar (invites/<kod>/test/<uygulama> = true).
+     Kurallar her uygulamanın test kaydını ayrı korur; kişi yalnızca kendisine açılanları okuyabilir. Eski "testçi" (beta: true) hepsini görür. */
+  async function loadBeta(inv) {
+    const out = {}, take = (k, v) => { const n = normBeta(v); if (n && n.webUrl) out[k] = n; };
+    try {
+      if (!inv || inv.owner || inv.beta === true) { const b = (await FB.get("beta")) || {}; Object.keys(b).forEach((k) => take(k, b[k])); return out; }
+      const ids = Object.keys(inv.test || {}).filter((k) => inv.test[k] === true);
+      await Promise.all(ids.map(async (k) => { try { take(k, await FB.get("beta/" + k)); } catch {} }));
+    } catch {}
+    return out;
+  }
+  // Yalnızca yöneticinin gördüğü uygulamalar (yönetici APK'ları vb.)
+  async function loadOzel() { try { return arr((await FB.get("ozel")) || []).filter((a) => a && a.id).map((a) => Object.assign(normApp(a), { adminOnly: true })); } catch { return []; } }
 
   /* ---------- admin taslağı ---------- */
   const DRAFT_KEY = "um.admin.draft2";
@@ -135,11 +153,13 @@
   // Yayındakiyle taslak arasındaki farktan kullanıcılara duyuru çıkarır (yeni uygulama, yeni sürüm, yeni test sürümü)
   function changes(prev, next) {
     const out = [], old = new Map((prev ? prev.apps : []).map((a) => [a.id, a]));
-    next.apps.filter((a) => !a.hidden).forEach((a) => {
+    // (2026-11-27) "Yeni uygulama eklendi" duyurusu kaldırıldı; yalnızca kullanıcıdaki uygulamanın yeni sürümü ve test sürümü duyurulur.
+    // Sadece yönetici uygulamaları hiç duyurulmaz.
+    next.apps.filter((a) => !a.hidden && !a.adminOnly).forEach((a) => {
       const o = old.get(a.id);
-      if (!o || o.hidden) out.push({ title: "Yeni uygulama: " + a.name, body: a.short || "Mağazaya eklendi.", app: a.id, hedef: "hepsi" });
-      else if (o.version !== a.version) out.push({ title: `${a.name} v${a.version}`, body: a.whatsNew.length ? a.whatsNew.slice(0, 3).join(" · ") : "Yeni sürüm hazır.", app: a.id, hedef: "hepsi" });
-      if (a.beta && (!o || !o.beta || o.beta.version !== a.beta.version)) out.push({ title: `${a.name} test sürümü v${a.beta.version}`, body: a.beta.notes.slice(0, 3).join(" · ") || "Denemen için yeni test sürümü.", app: a.id, hedef: "test" });
+      if (!o || o.hidden || o.adminOnly) return;
+      if (o.version !== a.version) out.push({ title: `${a.name} v${a.version}`, body: a.whatsNew.length ? a.whatsNew.slice(0, 3).join(" · ") : "Yeni sürüm hazır.", app: a.id, hedef: "hepsi" });
+      if (a.beta && a.beta.webUrl && (!o.beta || o.beta.version !== a.beta.version)) out.push({ title: `${a.name} test sürümü v${a.beta.version}`, body: a.beta.notes.slice(0, 3).join(" · ") || "Denemen için yeni test sürümü.", app: a.id, hedef: "test" });
     });
     return out;
   }
@@ -171,10 +191,14 @@
     }));
     out.store.updatedAt = new Date().toISOString();
     const beta = {};
-    out.apps.forEach((a) => { if (a.beta) beta[a.id] = a.beta; });
-    const catalog = JSON.parse(JSON.stringify(Object.assign({}, out, { apps: out.apps.map((a) => { const c = Object.assign({}, a); delete c.beta; return c; }) })));
+    out.apps.forEach((a) => { if (a.beta && !a.adminOnly) beta[a.id] = a.beta; });
+    const strip = (a) => { const c = Object.assign({}, a); delete c.beta; return c; };
+    // Sadece yönetici uygulamaları herkese açık kataloğa hiç yazılmaz: yalnızca sahibin okuyabildiği "ozel" dalına gider
+    const catalog = JSON.parse(JSON.stringify(Object.assign({}, out, { apps: out.apps.filter((a) => !a.adminOnly).map(strip) })));
+    const ozel = JSON.parse(JSON.stringify(out.apps.filter((a) => a.adminOnly).map(strip)));
     onStep("Katalog yazılıyor…");
     await FB.set("catalog", catalog);
+    await FB.set("ozel", ozel.length ? ozel : null);
     await FB.set("beta", Object.keys(beta).length ? beta : null);
     // duyurular
     const news = changes(prev, normalize(out));
@@ -183,14 +207,16 @@
       const t = Date.now();
       for (const x of news) {
         if (x.hedef === "hepsi") await FB.push("inbox", { title: x.title, body: x.body, app: x.app, t });
-        if (out.store.autoNotify) await FB.push("pushQueue", { title: x.title, body: x.body, link: C.siteUrl + "#/app/" + encodeURIComponent(x.app), hedef: x.hedef, durum: "bekliyor", t });
+        if (out.store.autoNotify) await FB.push("pushQueue", { title: x.title, body: x.body, link: (C.rootUrl || C.siteUrl) + "#/app/" + encodeURIComponent(x.app), hedef: x.hedef, durum: "bekliyor", t });
       }
     }
     // uygulama içi güncelleme denetimi için herkese açık sürüm dosyası (yalnızca sürüm + bağlantı)
     let versionsNote = "";
     if (GitHub.token) {
       onStep("Sürüm dosyası yazılıyor…");
-      const v = {}; out.apps.filter((a) => !a.hidden).forEach((a) => (v[a.id] = { name: a.name, version: a.version, updated: a.updated, paket: a.paket || "", apkMs: a.apkMs || 0, url: linkOf(a), store: C.siteUrl + "#/app/" + encodeURIComponent(a.id) }));
+      /* Yönetici uygulaması da dosyada kalır (o uygulamanın kendi zorunlu güncelleme denetimi bunu okur; yalnızca o paketi kurmuş
+         cihazı ilgilendirir) ama "yonetici" işaretlidir: mağaza onu kimseye göstermez, yönlendirmeyi Yönetim uygulamasına yapar. */
+      const v = {}; out.apps.filter((a) => !a.hidden).forEach((a) => (v[a.id] = Object.assign({ name: a.name, version: a.version, updated: a.updated, paket: pkgsOf(a)[0] || "", apkMs: a.apkMs || 0, url: linkOf(a), store: (C.rootUrl || C.siteUrl) + "#/app/" + encodeURIComponent(a.id) }, a.adminOnly ? { yonetici: true } : {})));
       try { await GitHub.put(C.versionsPath, b64FromText(JSON.stringify({ updatedAt: out.store.updatedAt, apps: v }, null, 2) + "\n"), "Sürüm dosyası güncellendi"); }
       catch (e) { versionsNote = "Sürüm dosyası yazılamadı: " + e.message; }
     } else versionsNote = "GitHub anahtarı olmadığı için uygulama içi güncelleme dosyası yazılmadı.";
@@ -289,6 +315,62 @@
     }
   };
 
+  /* ---------- geliştiriciler: kendi uygulamasını yükler ve düzenler (yönetici onaylayınca mağazaya girer) ----------
+     Yönetici bir geliştirici kodu oluşturur (um/gelistirici/<kod>); geliştirici kodu girince oturumu ona bağlanır (um/gclaims/<uid>).
+     Başvurular um/gapps/<kod>/<uygulama> altında durur. */
+  const dev = {
+    code() { return LS.get("um.devCode", ""); },
+    async claim(code) {
+      code = String(code || "").trim().toLowerCase();
+      if (!/^[a-z0-9-]{4,40}$/.test(code)) { const e = new Error("Kod geçersiz."); e.code = "badcode"; throw e; }
+      try { await FB.set("gclaims/" + FB.uid, code); }
+      catch { const x = new Error("Bu geliştirici kodu geçerli değil ya da kapatılmış."); x.code = "badcode"; throw x; }
+      LS.set("um.devCode", code); return code;
+    },
+    async me() { const c = this.code() || (await FB.get("gclaims/" + FB.uid).catch(() => null)); if (!c) return null; LS.set("um.devCode", c); const d = await FB.get("gelistirici/" + c).catch(() => null); return d ? Object.assign({ code: c }, d) : null; },
+    async apps(code) { const v = (await FB.get("gapps/" + code)) || {}; return Object.keys(v).map((k) => Object.assign({ id: k }, v[k])); },
+    save(code, id, app) { return FB.set(`gapps/${code}/${id}`, app); },
+    remove(code, id) { return FB.remove(`gapps/${code}/${id}`); },
+    /* Dosya yükleme (2026-11-27): geliştiricide GitHub anahtarı yoktur. Dosya telefondan parçalar hâlinde Firebase'e yazılır
+       (um/parca/<kod>/<dosya>/<n>), en son künyesi (um/yukleme/<kod>/<dosya>) eklenir. Sunucudaki GitHub görevi
+       (futbol-ligi/.github/workflows/um-gelistirici.yml) dosyayı GitHub'a aktarır, uygulama kaydındaki "yukleniyor:<dosya>"
+       yer tutucusunu gerçek adresle değiştirir ve parçaları siler. */
+    PARCA: 512 * 1024,
+    newId() { return [...crypto.getRandomValues(new Uint8Array(8))].map((b) => b.toString(16).padStart(2, "0")).join(""); },
+    async uploadAs(code, appId, alan, blob, name, id, onProg = () => {}) {
+      const n = Math.ceil(blob.size / this.PARCA) || 1;
+      const meta = { app: appId, alan, ad: String(name || alan).slice(0, 120), tur: blob.type || "", boyut: blob.size, parca: n, t: Date.now(), durum: "yukleniyor" };
+      await FB.set(`yukleme/${code}/${id}`, meta);   // yarıda kalırsa sunucu 6 saat sonra temizler
+      for (let i = 0; i < n; i++) {
+        const b64 = await b64FromBlob(blob.slice(i * this.PARCA, (i + 1) * this.PARCA));
+        await FB.set(`parca/${code}/${id}/${i}`, b64);
+        onProg((i + 1) / n);
+      }
+      await FB.set(`yukleme/${code}/${id}`, Object.assign(meta, { durum: "hazir" }));
+      return id;
+    }
+  };
+  const PH = /^yukleniyor:/;
+  /* Mağaza için geliştirici uygulamaları: yönetici yayından kaldırmadıysa ve dosyaları hazırsa görünür */
+  async function loadDevApps() {
+    let v; try { v = (await FB.get("gapps")) || {}; } catch { return []; }
+    const out = [];
+    Object.entries(v).forEach(([code, l]) => Object.entries(l || {}).forEach(([id, x]) => {
+      if (!x || x.engel) return;
+      const web = x.kind === "web", main = web ? x.webUrl : x.apkUrl;
+      if (!main || PH.test(main)) return;
+      const ok = (u) => (u && !PH.test(u) ? u : "");
+      out.push(Object.assign(normApp({
+        id: "g-" + code + "-" + id, name: x.name, short: x.short, description: x.description, category: x.category, kind: web ? "web" : "apk",
+        webUrl: web ? x.webUrl : "", apkUrl: web ? "" : x.apkUrl, paket: x.paket, apkMs: x.apkMs, size: x.size, minAndroid: x.minAndroid,
+        version: x.version || "1.0", updated: x.updated || (x.t ? new Date(x.t).toISOString().slice(0, 10) : ""), created: x.created || "",
+        features: x.features, whatsNew: x.whatsNew, icon: ok(x.icon), video: ok(x.video), screenshots: arr(x.screenshots).map(ok).filter(Boolean),
+        dev: code, devId: id, devName: x.devName || ""
+      }), { fromDev: true }));
+    }));
+    return out;
+  }
+
   /* ---------- kullanıcıya özel yerel veriler ---------- */
   const user = {
     favs() { return LS.get("um.favs", []); },
@@ -301,5 +383,5 @@
     setInboxSeen(t) { LS.set("um.inboxSeen", t); }
   };
 
-  window.UMData = { guessPackage, uploadVideo, packagesOf, normalize, normApp, normBeta, linkOf, loadCatalog, loadBeta, draft, publish, changes, GitHub, releases, versionFrom, notesFrom, parseRepo, releaseStats, parseRelease, member, user, LS, arr };
+  window.UMData = { loadDevApps, dev, pkgsOf, loadOzel, guessPackage, uploadVideo, packagesOf, normalize, normApp, normBeta, linkOf, loadCatalog, loadBeta, draft, publish, changes, GitHub, releases, versionFrom, notesFrom, parseRepo, releaseStats, parseRelease, member, user, LS, arr };
 })();

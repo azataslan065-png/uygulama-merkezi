@@ -20,7 +20,7 @@
     } catch {}
   }
   const view = $("#view");
-  let db = null, published = null, stats = {}, live = { invites: {}, members: {}, claims: {}, events: {}, reviews: {}, reports: {}, queue: {} };
+  let db = null, published = null, stats = {}, live = { invites: {}, members: {}, claims: {}, events: {}, reviews: {}, reports: {}, queue: {}, devs: {}, gapps: {} };
 
   /* ================== GİRİŞ ================== */
   function authView(msg) {
@@ -59,8 +59,10 @@
   async function loadData() {
     loading(true, "Veriler yükleniyor…");
     try {
-      const [cat, beta] = await Promise.all([FB.get("catalog"), FB.get("beta")]);
+      const [cat, beta, ozel] = await Promise.all([FB.get("catalog"), FB.get("beta"), D.loadOzel()]);
       published = D.normalize(cat || {});
+      // Yalnızca yönetici uygulamaları ayrı dalda durur; panelde diğerleriyle birlikte düzenlenir
+      ozel.forEach((a) => { if (!published.apps.some((x) => x.id === a.id)) published.apps.push(a); });
       published.apps.forEach((a) => { if (beta && beta[a.id]) a.beta = D.normBeta(beta[a.id]); });
     } catch (e) { published = D.normalize({}); toast("Yayındaki katalog okunamadı: " + e.message, "warn", 4000); }
     finally { loading(false); }
@@ -71,12 +73,13 @@
     Promise.all(db.apps.filter((a) => !a.paket && a.kind !== "web").map(async (a) => { const pk = await D.guessPackage(a); if (pk) { a.paket = pk; return a.name; } }))
       .then((l) => { l = l.filter(Boolean); if (l.length) { save("Paket adı bulundu: " + l.join(", ")); render(); } });
     loadLive();
-    db.apps.forEach(async (a) => { const s = a.kind === "apk" && (await D.releaseStats(a.apkUrl)); if (s) { stats[a.id] = s; if (route() === "panel") panelKpis(); } });
+    db.apps.forEach(async (a) => { const s = a.kind === "apk" && (await D.releaseStats(a.apkUrl)); if (s) { stats[a.id] = s; if (route() === "panel") { panelKpis(); if (a.adminOnly) ownRefresh(); } } });
+    setTimeout(ownUpdateNotice, 3500);
   }
-  async function loadLive(keys = ["invites", "members", "claims", "events", "reviews", "reports", "queue"]) {
-    const path = { queue: "pushQueue" };
+  async function loadLive(keys = ["invites", "members", "claims", "events", "reviews", "reports", "queue", "devs", "gapps"]) {
+    const path = { queue: "pushQueue", devs: "gelistirici" };
     await Promise.all(keys.map(async (k) => { try { live[k] = (await FB.get(path[k] || k)) || {}; } catch { live[k] = {}; } }));
-    const r = route(); if (r === "panel") panel(true); else if (r === "kisiler") people(true); else if (r === "mesajlar") messages(true);
+    const r = route(), h = location.hash; if (r === "panel") panel(true); else if (r === "kisiler") people(true); else if (r === "mesajlar") messages(true); else if (h.startsWith("#/uygulamalar")) apps();
     updateBadge();
   }
   const route = () => { const h = location.hash || "#/panel"; return h.startsWith("#/kisiler") ? "kisiler" : h.startsWith("#/mesajlar") ? "mesajlar" : h.startsWith("#/ayarlar") ? "ayarlar" : h.startsWith("#/uygulamalar") || h.startsWith("#/yeni") || h.startsWith("#/duzenle") ? "uygulamalar" : "panel"; };
@@ -108,11 +111,62 @@
   const totalDownloads = () => db.apps.reduce((s, a) => s + (a.downloads || 0) + (stats[a.id] ? stats[a.id].downloads : 0), 0);
   function ratingOf(id) { const r = Object.values(live.reviews[id] || {}); if (!r.length) return null; return { avg: r.reduce((s, x) => s + (+x.stars || 0), 0) / r.length, n: r.length }; }
   const randCode = () => { const a = "abcdefghjkmnpqrstuvwxyz23456789"; return [...crypto.getRandomValues(new Uint8Array(10))].map((b) => a[b % a.length]).join(""); };
-  const inviteUrl = (code) => C.siteUrl + "?d=" + code;
+  const inviteUrl = (code) => (C.rootUrl || C.siteUrl) + "?d=" + code;
   const membersOf = (code) => Object.entries(live.members).filter(([, m]) => m && m.code === code).map(([uid, m]) => Object.assign({ uid }, m));
   const appName = (id) => (db.apps.find((a) => a.id === id) || {}).name || id;
   const appCur = (id) => (db.apps.find((a) => a.id === id) || {}).version;
   const shortUa = (ua) => { ua = String(ua || ""); const m = ua.match(/Android [\d.]+;\s*([^;)]+)/); return m ? m[1].replace(/Build.*/, "").trim() : /iPhone/.test(ua) ? "iPhone" : /Windows/.test(ua) ? "Bilgisayar" : ""; };
+
+  /* ================== YÖNETİCİ UYGULAMALARI ==================
+     "Sadece yönetici" işaretli uygulamalar (ör. SAHA Admin) herkese açık mağazada görünmez; güncellemeleri yalnızca burada,
+     Yönetim uygulamasının içinden kurulur. Başka bir cihazda bu paket kurulu olsa bile mağaza ona güncelleme göstermez. */
+  const ownApps = () => db.apps.filter((a) => a.adminOnly && !a.hidden && a.kind !== "web");
+  const ownBusy = {};
+  function ownInfo(a) {
+    if (!Y) return null;
+    for (const p of D.pkgsOf(a)) { try { const i = JSON.parse(Y.bilgi(p)); if (i.kurulu) return Object.assign({ paket: p }, i); } catch { return null; } }
+    return { kurulu: false, paket: D.pkgsOf(a)[0] || "" };
+  }
+  function ownState(a) {
+    if (ownBusy[a.id]) return { k: "busy", label: ownBusy[a.id] };
+    const i = ownInfo(a); if (!i) return { k: "web", label: "İndir" };
+    if (!i.kurulu) return { k: "yukle", label: "Yükle" };
+    const apk = (stats[a.id] && Date.parse(stats[a.id].updated)) || a.apkMs;
+    return apk && i.zaman < apk - 120000 ? { k: "guncelle", label: "Güncelle" } : { k: "ac", label: "Aç" };
+  }
+  function ownHtml() {
+    const l = ownApps(); if (!l.length) return "";
+    return html`<section class="sec"><div class="sec-h"><h2>Yönetici uygulamalarım</h2><span>yalnızca sen görürsün</span></div>
+      ${l.map((a) => { const st = ownState(a); return html`<div class="adm-own" data-own="${a.id}">${appIcon(a)}<div class="t"><b>${a.name}</b><small>Sürüm ${a.version} · ${fmtDate(a.updated)}</small></div>
+        <button class="pill ${st.k}" data-own-act="${a.id}"><span>${st.label}</span></button></div>`; })}</section>`;
+  }
+  function ownRefresh() { const b = $("#ownBox"); if (b) { b.innerHTML = ownHtml().s || ""; bindOwn(); } }
+  function bindOwn() {
+    $$("[data-own-act]").forEach((b) => b.onclick = () => {
+      const a = db.apps.find((x) => x.id === b.dataset.ownAct); if (!a) return;
+      const st = ownState(a), i = ownInfo(a);
+      if (st.k === "busy") return;
+      if (st.k === "web") { window.open(a.apkUrl, "_blank", "noopener"); return; }
+      if (st.k === "ac") { if (!Y.ac(i.paket)) toast("Açılamadı", "err"); return; }
+      ownBusy[a.id] = "İniyor…"; ownRefresh(); Y.kur(a.id, a.apkUrl);
+    });
+  }
+  // Yönetim uygulamasından gelen kurulum olayları (kendi güncellemesi ve yönetici uygulamaları)
+  window.UMYerelOlay = (e) => {
+    if (!e) return;
+    if (e.tur === "odak") { ownRefresh(); return; }
+    if (e.id === "__admin") { if (e.tur === "ilerleme" && e.toplam) loading(true, "İniyor %" + Math.round(e.inen * 100 / e.toplam)); else if (e.tur === "onay" || e.tur === "bitti") { loading(false); if (e.mesaj) alertErr("Kurulamadı", e.mesaj); } return; }
+    if (e.tur === "ilerleme") ownBusy[e.id] = e.toplam > 0 ? "%" + Math.min(100, Math.round(e.inen * 100 / e.toplam)) : "İniyor…";
+    else if (e.tur === "kuruluyor") ownBusy[e.id] = "Kuruluyor…";
+    else if (e.tur === "onay") ownBusy[e.id] = "Onay bekleniyor…";
+    else if (e.tur === "izin") { delete ownBusy[e.id]; dialog({ title: "Bir kerelik izin", message: "Açılan ekranda “Bu kaynağa izin ver”i aç ve geri dön.", type: "info" }); }
+    else if (e.tur === "bitti") { delete ownBusy[e.id]; if (e.mesaj) alertErr("Kurulamadı", e.mesaj); else toast("Kuruldu ✓", "ok"); }
+    ownRefresh();
+  };
+  function ownUpdateNotice() {
+    const ups = ownApps().filter((a) => ownState(a).k === "guncelle");
+    if (ups.length) toast(ups.length === 1 ? ups[0].name + " için güncelleme var" : ups.length + " yönetici uygulamasında güncelleme var", "warn", 4500);
+  }
 
   /* ================== PANEL ================== */
   function panel(soft) {
@@ -122,13 +176,14 @@
       <section class="hero glass"><div class="hi">YÖNETİM PANELİ</div><h1>Merhaba, <span>${db.store.owner || "yönetici"}</span></h1>
         <p>${isDirty() ? "Yayınlanmamış değişikliklerin var." : db.store.updatedAt ? "Son yayın: " + ago(db.store.updatedAt) : "Henüz hiç yayın yapılmadı."}</p>
         ${isDirty() ? raw(`<button class="btn primary" style="margin-top:14px" id="pubInline">${I.cloud}Şimdi yayınla</button>`) : ""}</section>
+      <div id="ownBox">${raw(ownHtml().s || "")}</div>
       <div class="kpis" id="kpis"></div>
       ${Object.keys(live.invites).length ? "" : html`<div class="note warn" style="margin-top:14px">Henüz kimseyi davet etmedin. <a href="#/kisiler" style="text-decoration:underline">Kişiler</a> sekmesinden herkese ayrı davet bağlantısı oluştur.</div>`}
       <section class="sec"><div class="sec-h"><h2>Uygulama istatistikleri</h2><span>mağazadan</span></div><div id="appStats"></div></section>
       <section class="sec"><div class="sec-h"><h2>Son güncellemeler</h2><a href="#/uygulamalar" style="color:var(--mut);font-size:13px">Tümü →</a></div>
         ${recent.length ? recent.map(row) : html`<div class="empty glass"><div class="em">📦</div><h3>Henüz uygulama yok</h3><p>İlk uygulamanı eklemek için + düğmesine dokun.</p><a class="btn primary" style="margin-top:16px" href="#/yeni">${raw(I.plus)}Uygulama ekle</a></div>`}
       </section></div>`.s;
-    panelKpis(); appStats(); bindRows();
+    panelKpis(); appStats(); bindRows(); bindOwn();
     const pi = $("#pubInline"); if (pi) pi.onclick = publishNow;
     if (!soft) scrollTo(0, 0);
   }
@@ -158,7 +213,7 @@
     }).join("");
   }
   const row = (a) => html`<div class="row-app glass ${a.hidden ? "hid" : ""}" data-id="${a.id}">
-    ${appIcon(a)}<div class="t"><b>${a.name}${a.hidden ? raw('<span class="badge hid">GİZLİ</span>') : ""}${a.featured ? raw('<span class="badge new">ÖNE ÇIKAN</span>') : ""}${a.kind === "web" ? raw('<span class="badge web">WEB</span>') : ""}${a.beta ? raw('<span class="badge beta">TEST</span>') : ""}</b>
+    ${appIcon(a)}<div class="t"><b>${a.name}${a.hidden ? raw('<span class="badge hid">GİZLİ</span>') : ""}${a.featured ? raw('<span class="badge new">ÖNE ÇIKAN</span>') : ""}${a.kind === "web" ? raw('<span class="badge web">WEB</span>') : ""}${a.beta ? raw('<span class="badge beta">TEST</span>') : ""}${a.adminOnly ? raw('<span class="badge adm">YÖNETİCİ</span>') : ""}${a.dev ? raw('<span class="badge web">GELİŞTİRİCİ</span>') : ""}</b>
     <small>v${a.version} · ${a.category || "—"} · ${fmtDate(a.updated)} · ${fmtNum(dlCount(a.id))} indirme</small></div>
     <div class="acts"><button class="icon-btn" data-vis title="${a.hidden ? "Göster" : "Gizle"}">${raw(a.hidden ? I.eyeOff : I.eye)}</button>
     <a class="icon-btn" href="#/duzenle/${encodeURIComponent(a.id)}" title="Düzenle">${raw(I.edit)}</a>
@@ -171,26 +226,121 @@
     });
   }
 
+  /* ---------- geliştirici uygulamaları ----------
+     Geliştiriciler onay beklemeden yayınlar; yönetici gerekirse yayından kaldırır (engel), geri açar ya da siler. */
+  const PH = /^yukleniyor:/;
+  function submissions() {
+    const out = [];
+    Object.entries(live.gapps).forEach(([code, l]) => Object.entries(l || {}).forEach(([id, x]) => x && out.push(Object.assign({ code, id, devName: (live.devs[code] || {}).name || x.devName || "Geliştirici" }, x))));
+    return out.sort((x, y) => (y.t || 0) - (x.t || 0));
+  }
+  const subPending = (x) => [x.icon, x.video, x.apkUrl, ...(x.screenshots || [])].some((u) => u && PH.test(u));
+  function subState(x) { if (x.engel) return ["YAYINDAN KALDIRILDI", "hid"]; if (x.hata) return ["HATA", "hid"]; if (subPending(x)) return ["AKTARILIYOR", "upd"]; return ["YAYINDA", "new"]; }
+  function subHtml(x) {
+    const d = subState(x), icon = x.icon && !PH.test(x.icon) ? x.icon : "";
+    return html`<div class="dev-card" data-sub="${x.code}/${x.id}"><div class="h">${appIcon({ name: x.name, icon })}<div><b>${x.name}</b><small>${x.devName} · sürüm ${x.version || "—"} · ${x.t ? ago(x.t) : ""}</small></div><span class="badge ${d[1]}">${d[0]}</span></div>
+      ${x.hata ? html`<p class="help" style="margin:8px 0 0;color:var(--bad)">${x.hata}</p>` : ""}
+      <div class="rowbtns"><button class="btn ghost sm" data-sv>${raw(I.eye)}İncele</button><button class="btn ${x.engel ? "ok" : "danger"} sm" data-se>${x.engel ? "Yayına al" : "Yayından kaldır"}</button><button class="btn danger sm" data-sd>${raw(I.trash)}Sil</button></div></div>`;
+  }
+  function bindSubs() {
+    const all = submissions();
+    $$("[data-sub]").forEach((el) => {
+      const x = all.find((s) => s.code + "/" + s.id === el.dataset.sub); if (!x) return;
+      const ok = (u) => (u && !PH.test(u) ? u : "");
+      $("[data-sv]", el).onclick = () => {
+        const m = modal(`<h3>${esc(x.name)}</h3><p>${esc(x.devName)} · ${x.kind === "web" ? "Web" : "APK"} · sürüm ${esc(x.version || "—")}</p>
+          <p style="color:var(--txt);white-space:pre-line">${esc(x.short || "")}\n\n${esc(x.description || "")}</p>
+          <div class="kv" style="margin-bottom:12px"><div><span>Dosya</span><b style="word-break:break-all">${esc((x.kind === "web" ? x.webUrl : ok(x.apkUrl)) || "aktarılıyor")}</b></div>${x.paket ? `<div><span>Paket</span><b>${esc(x.paket)}</b></div>` : ""}<div><span>Kategori</span><b>${esc(x.category || "—")}</b></div></div>
+          ${ok(x.video) ? `<video src="${esc(x.video)}" controls playsinline style="width:100%;max-height:220px;border-radius:10px;background:#000;margin-bottom:10px"></video>` : ""}
+          ${(x.screenshots || []).filter(ok).length ? `<div style="display:flex;gap:8px;overflow-x:auto;margin-bottom:14px">${x.screenshots.filter(ok).map((s) => `<img src="${esc(s)}" style="height:180px;width:auto;border-radius:10px">`).join("")}</div>` : ""}
+          <div class="row"><button class="btn ghost" data-c>Kapat</button></div>`);
+        $("[data-c]", m.el).onclick = m.close;
+      };
+      $("[data-se]", el).onclick = async () => {
+        try { await FB.set(`gapps/${x.code}/${x.id}/engel`, x.engel ? null : true); toast(x.engel ? "Yeniden yayında" : "Mağazadan kaldırıldı", "ok"); await loadLive(["gapps"]); } catch (e) { alertErr("Kaydedilemedi", e.message); }
+      };
+      $("[data-sd]", el).onclick = async () => {
+        if (!(await confirmDlg(`${x.name} silinsin mi?`, "Uygulama mağazadan ve geliştiricinin listesinden kalkar.", "Sil", true))) return;
+        try { await FB.remove(`gapps/${x.code}/${x.id}`); toast("Silindi", "ok"); await loadLive(["gapps"]); } catch (e) { alertErr("Silinemedi", e.message); }
+      };
+    });
+  }
+
   function apps() {
     setTab("uygulamalar");
-    view.innerHTML = html`<div class="view"><div class="sec-h" style="margin-top:14px"><h2>Uygulamalar</h2><span>${db.apps.length} uygulama</span></div>
+    const subs = submissions();
+    view.innerHTML = html`<div class="view">${subs.length ? html`<section class="sec" style="margin-top:14px"><div class="sec-h"><h2>Geliştirici uygulamaları</h2><span>${subs.length}</span></div>${subs.map(subHtml)}</section>` : ""}
+      <div class="sec-h" style="margin-top:14px"><h2>Uygulamalar</h2><span>${db.apps.length} uygulama</span></div>
       <div class="search" style="margin:0 0 14px">${raw(I.search)}<input id="aq" type="search" placeholder="Ara…" autocomplete="off"></div>
       <div id="list">${db.apps.length ? db.apps.map(row) : html`<div class="empty glass"><div class="em">📦</div><h3>Henüz uygulama yok</h3><p>+ düğmesiyle ilk uygulamanı ekle.</p></div>`}</div></div>`.s;
-    bindRows();
+    bindRows(); bindSubs();
     $("#aq").oninput = (e) => { const q = e.target.value.toLocaleLowerCase("tr"); $$(".row-app").forEach((r) => r.classList.toggle("hidden", !r.textContent.toLocaleLowerCase("tr").includes(q))); };
   }
 
   /* ================== KİŞİLER (davetler + istatistik) ================== */
+  let peopleTab = "davet";
   function people(soft) {
     setTab("kisiler");
     const inv = Object.entries(live.invites).filter(([, x]) => x).sort(([, x], [, y]) => (y.created || 0) - (x.created || 0));
-    view.innerHTML = html`<div class="view"><div class="sec-h" style="margin-top:14px"><h2>Kişiler</h2><span>${inv.length} davet</span></div>
-      <p class="help" style="margin:-6px 0 14px">Herkese ayrı bir davet bağlantısı ver. Kimin girdiğini görürsün, istediğin kişinin erişimini tek dokunuşla kapatırsın. <b>Testçi</b> olarak işaretlediklerin test sürümlerini de görür.</p>
-      <button class="btn primary block" id="newInv">${raw(I.plus)}Yeni davet oluştur</button>
-      <div style="margin-top:14px">${inv.length ? inv.map(([code, x]) => personCard(code, x)) : html`<div class="empty glass"><div class="em">✉️</div><h3>Henüz davet yok</h3><p>İlk davet bağlantısını oluştur ve paylaş.</p></div>`}</div></div>`.s;
-    $("#newInv").onclick = newInvite;
-    $$("[data-code]").forEach((c) => bindPerson(c, c.dataset.code));
+    const devs = Object.entries(live.devs).filter(([, x]) => x).sort(([, x], [, y]) => (y.created || 0) - (x.created || 0));
+    view.innerHTML = html`<div class="view"><div class="sec-h" style="margin-top:14px"><h2>Kişiler</h2></div>
+      <div class="chips" style="padding-top:0"><button class="chip ${peopleTab === "davet" ? "on" : ""}" data-pt="davet">Davetliler<span class="n">${inv.length}</span></button><button class="chip ${peopleTab === "gel" ? "on" : ""}" data-pt="gel">Geliştiriciler<span class="n">${devs.length}</span></button></div>
+      ${peopleTab === "davet" ? html`<p class="help" style="margin:4px 0 14px">Herkese ayrı bir davet bağlantısı ver. Test sürümlerini yalnızca <b>Test erişimi</b>'nden seçtiğin kişiler görür.</p>
+        <button class="btn primary block" id="newInv">${raw(I.plus)}Yeni davet oluştur</button>
+        <div style="margin-top:14px">${inv.length ? inv.map(([code, x]) => personCard(code, x)) : html`<div class="empty"><div class="em">${raw(I.users)}</div><h3>Henüz davet yok</h3><p>İlk davet bağlantısını oluştur ve paylaş.</p></div>`}</div>`
+      : html`<p class="help" style="margin:4px 0 14px">Geliştiriciler kendi uygulamalarını yükler ve düzenler; başka hiçbir şey göremez. Gönderdikleri onay beklemeden mağazaya girer; <b>Uygulamalar</b> sekmesinden yayından kaldırabilir ya da silebilirsin.</p>
+        <button class="btn primary block" id="newDev">${raw(I.plus)}Yeni geliştirici</button>
+        <div style="margin-top:14px">${devs.length ? devs.map(([code, x]) => devCard(code, x)) : html`<div class="empty"><div class="em">${raw(I.users)}</div><h3>Henüz geliştirici yok</h3><p>Bir geliştirici ekle, bağlantısını ona gönder.</p></div>`}</div>`}</div>`.s;
+    $$("[data-pt]").forEach((b) => b.onclick = () => { peopleTab = b.dataset.pt; people(true); });
+    if (peopleTab === "davet") { $("#newInv").onclick = newInvite; $$("[data-code]").forEach((c) => bindPerson(c, c.dataset.code)); }
+    else { $("#newDev").onclick = newDev; $$("[data-dcode]").forEach((c) => bindDev(c, c.dataset.dcode)); }
     if (!soft) scrollTo(0, 0);
+  }
+  /* ---------- geliştiriciler ---------- */
+  const devUrl = (code) => C.siteUrl + "gelistirici.html?g=" + code;
+  function devCard(code, x) {
+    const apps = Object.keys(live.gapps[code] || {});
+    return html`<div class="form-sec glass" data-dcode="${code}" style="${x.active ? "" : "opacity:.6"}">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><b style="font-size:16px">${x.name || "İsimsiz"}</b>${x.active ? raw('<span class="badge new">AKTİF</span>') : raw('<span class="badge hid">KAPALI</span>')}</div>
+      <p class="help" style="margin:6px 0 0">${apps.length ? apps.length + " uygulama gönderdi" : "Henüz uygulama göndermedi"} · kod ${code}</p>
+      <div class="rowbtns"><button class="btn ghost sm" data-dlink>${raw(I.share)}Bağlantı</button><button class="btn ${x.active ? "danger" : "ok"} sm" data-dact>${x.active ? "Erişimi kapat" : "Erişimi aç"}</button><button class="btn danger sm" data-drm>${raw(I.trash)}Sil</button></div></div>`;
+  }
+  function bindDev(el, code) {
+    const x = live.devs[code];
+    $("[data-dlink]", el).onclick = () => showLink(devUrl(code), (x.name || "Geliştirici") + " için geliştirici bağlantısı", "Bu bağlantıyla yalnızca kendi uygulamalarını yükleyip düzenleyebilir. Kod: " + code);
+    $("[data-dact]", el).onclick = async () => { try { await FB.set(`gelistirici/${code}/active`, !x.active); toast(x.active ? "Erişim kapatıldı" : "Erişim açıldı", "ok"); await loadLive(["devs"]); } catch (e) { alertErr("Kaydedilemedi", e.message); } };
+    $("[data-drm]", el).onclick = async () => {
+      if (!(await confirmDlg(`${x.name || "Geliştirici"} silinsin mi?`, "Kodu geçersiz olur ve gönderdiği başvurular silinir. Mağazaya alınmış uygulamalar katalogda kalır.", "Sil", true))) return;
+      try { await FB.remove("gelistirici/" + code); await FB.remove("gapps/" + code); toast("Silindi", "ok"); await loadLive(["devs", "gapps"]); } catch (e) { alertErr("Silinemedi", e.message); }
+    };
+  }
+  function newDev() {
+    const m = modal(`<h3>Yeni geliştirici</h3><p>Ad mağazada uygulamasının altında “geliştirici” olarak görünür.</p><label class="field"><span>Ad</span><input class="inp" id="dname" maxlength="40" placeholder="Örn. Mehmet Yazılım"></label><div class="row" style="margin-top:12px"><button class="btn ghost" data-c>Vazgeç</button><button class="btn primary" data-o>Oluştur</button></div>`);
+    $("#dname", m.el).focus(); $("[data-c]", m.el).onclick = m.close;
+    $("[data-o]", m.el).onclick = async () => {
+      const name = $("#dname", m.el).value.trim(); if (!name) return toast("Bir ad yaz", "warn");
+      const code = randCode();
+      try { await FB.set("gelistirici/" + code, { name, active: true, created: Date.now() }); m.close(); await loadLive(["devs"]); showLink(devUrl(code), name + " için geliştirici bağlantısı", "Bu bağlantıyla yalnızca kendi uygulamalarını yükleyip düzenleyebilir. Kod: " + code); }
+      catch (e) { alertErr("Oluşturulamadı", e.message); }
+    };
+  }
+  function showLink(url, title, text) {
+    const m = modal(`<h3>${esc(title)}</h3><p>${esc(text)}</p><div class="qr">${qrSvg(url)}</div><div class="linkbox"><code>${esc(url)}</code><button class="btn sm ghost" data-copy>${I.copy}Kopyala</button></div><div class="row"><button class="btn ghost" data-close>Kapat</button></div>`);
+    $("[data-copy]", m.el).onclick = () => copy(url); $("[data-close]", m.el).onclick = m.close;
+  }
+  /* ---------- kişi bazında test erişimi ---------- */
+  function testAccess(code) {
+    const x = live.invites[code], betaApps = db.apps.filter((a) => a.beta && !a.adminOnly), on = Object.assign({}, x.test || {});
+    if (!betaApps.length) return dialog({ title: "Test sürümü yok", message: "Önce bir uygulamanın düzenleme ekranından test sürümü ekle (test sitesi adresiyle) ve yayınla.", type: "info" });
+    const m = modal(`<h3>${esc(x.name || "Kişi")} · test erişimi</h3><p>İşaretlediğin uygulamaların test sürümünü görür; diğerlerini görmez.</p>
+      <div class="test-list">${betaApps.map((a) => `<label>${appIcon(a).s}<span><b>${esc(a.name)}</b><small>Test sürümü ${esc(a.beta.version)}</small></span><input type="checkbox" data-ta="${esc(a.id)}" ${on[a.id] === true || x.beta === true ? "checked" : ""}></label>`).join("")}</div>
+      <div class="row" style="margin-top:14px"><button class="btn ghost" data-c>Vazgeç</button><button class="btn primary" data-o>Kaydet</button></div>`);
+    $("[data-c]", m.el).onclick = m.close;
+    $("[data-o]", m.el).onclick = async () => {
+      const t = {}; $$("[data-ta]", m.el).forEach((c) => { if (c.checked) t[c.dataset.ta] = true; });
+      try { await FB.set(`invites/${code}/test`, Object.keys(t).length ? t : null); if (x.beta) await FB.set(`invites/${code}/beta`, null); m.close(); toast("Test erişimi kaydedildi", "ok"); await loadLive(["invites"]); }
+      catch (e) { alertErr("Kaydedilemedi", e.message); }
+    };
   }
   function personCard(code, x) {
     const ms = membersOf(code), last = Math.max(0, ...ms.map((m) => m.last || 0));
@@ -198,11 +348,11 @@
     const dev = [...new Set(ms.map((m) => shortUa(m.ua)).filter(Boolean))].join(", ");
     return html`<div class="form-sec glass" data-code="${code}" style="${x.active ? "" : "opacity:.6"}">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><b style="font-size:16px">${x.name || "İsimsiz"}</b>
-        ${x.active ? raw('<span class="badge new">AKTİF</span>') : raw('<span class="badge hid">İPTAL</span>')}${x.beta ? raw('<span class="badge beta">TESTÇİ</span>') : ""}</div>
+        ${x.active ? raw('<span class="badge new">AKTİF</span>') : raw('<span class="badge hid">İPTAL</span>')}${x.beta ? raw('<span class="badge beta">TÜM TESTLER</span>') : Object.keys(x.test || {}).length ? raw(`<span class="badge beta">${Object.keys(x.test).length} TEST</span>`) : ""}</div>
       <p class="help" style="margin:6px 0 0">${ms.length ? `${ms.length} cihaz · son giriş ${ago(last) || "—"}${dev ? " · " + dev : ""}` : "Henüz bağlantıyı açmadı"}</p>
       ${Object.keys(dls).length ? html`<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px">${Object.entries(dls).map(([id, d]) => { const cur = appCur(id), oldv = !d.beta && cur && d.v !== cur; return html`<span class="chip" style="min-height:30px;font-size:12.5px;${oldv ? "color:var(--warn);border-color:rgba(255,192,72,.35)" : ""}">${appName(id)} v${d.v}${d.beta ? " (test)" : ""}${oldv ? " · eski" : ""}</span>`; })}</div>` : ""}
       <div class="rowbtns"><button class="btn ghost sm" data-link>${raw(I.share)}Bağlantı</button>
-        <button class="btn ghost sm" data-beta>${x.beta ? "Testçilikten çıkar" : "Testçi yap"}</button>
+        <button class="btn ghost sm" data-beta>${raw(I.flask)}Test erişimi</button>
         <button class="btn ${x.active ? "danger" : "ok"} sm" data-act>${x.active ? "Erişimi kapat" : "Erişimi aç"}</button>
         <button class="btn ghost sm" data-ren>${raw(I.edit)}Ad</button>
         <button class="btn danger sm" data-rm aria-label="Sil">${raw(I.trash)}Sil</button></div></div>`;
@@ -210,7 +360,7 @@
   function bindPerson(el, code) {
     const x = live.invites[code];
     $("[data-link]", el).onclick = () => showInvite(code, x.name);
-    $("[data-beta]", el).onclick = async () => { await upd(`invites/${code}/beta`, !x.beta, x.beta ? `${x.name} artık testçi değil` : `${x.name} testçi oldu`); };
+    $("[data-beta]", el).onclick = () => testAccess(code);
     $("[data-act]", el).onclick = async () => {
       if (x.active && !(await confirmDlg(`${x.name || "Bu kişi"} için erişim kapatılsın mı?`, "Mağazayı açamaz; yorum ve hata bildirimi gönderemez. İstersen sonra tekrar açabilirsin.", "Erişimi kapat", true))) return;
       await upd(`invites/${code}/active`, !x.active, x.active ? "Erişim kapatıldı" : "Erişim açıldı");
@@ -232,14 +382,13 @@
   function newInvite() {
     const m = modal(`<h3>Yeni davet</h3><p>Kimi davet ediyorsun? Ad sadece sana görünür ve yorumlarında yazar.</p>
       <label class="field"><span>Ad</span><input class="inp" id="iname" maxlength="40" placeholder="Örn. Ahmet"></label>
-      <label class="switch"><span>Testçi (test sürümlerini de görsün)</span><input type="checkbox" id="ibeta"><i></i></label>
       <div class="row" style="margin-top:12px"><button class="btn ghost" data-c>Vazgeç</button><button class="btn primary" data-o>Oluştur</button></div>`);
     $("#iname", m.el).focus();
     $("[data-c]", m.el).onclick = m.close;
     $("[data-o]", m.el).onclick = async () => {
       const name = $("#iname", m.el).value.trim(); if (!name) return toast("Bir ad yaz", "warn");
       const code = randCode();
-      try { await FB.set("invites/" + code, { name, active: true, beta: $("#ibeta", m.el).checked, created: Date.now() }); m.close(); await loadLive(["invites"]); showInvite(code, name); }
+      try { await FB.set("invites/" + code, { name, active: true, created: Date.now() }); m.close(); await loadLive(["invites"]); showInvite(code, name); }
       catch (e) { alertErr("Oluşturulamadı", e.message); }
     };
   }
@@ -318,7 +467,7 @@
       try {
         const t = Date.now();
         if (hedef === "hepsi") await FB.push("inbox", { title, body, app, t });
-        if ($("#anP").checked) await FB.push("pushQueue", { title, body, link: C.siteUrl + (app ? "#/app/" + encodeURIComponent(app) : "#/bildirimler"), hedef, durum: "bekliyor", t });
+        if ($("#anP").checked) await FB.push("pushQueue", { title, body, link: (C.rootUrl || C.siteUrl) + (app ? "#/app/" + encodeURIComponent(app) : "#/bildirimler"), hedef, durum: "bekliyor", t });
         loading(false); toast("Duyuru gönderildi", "ok"); await loadLive(["queue"]);
       } catch (e) { loading(false); alertErr("Gönderilemedi", e.message); }
     };
@@ -352,6 +501,7 @@
           <label class="field"><span>Vurgu rengi</span><input class="inp" type="color" name="accent" value="${a.accent}" style="padding:6px;height:48px"></label></div>
         <label class="switch"><span>Mağazada göster</span><input type="checkbox" name="visible" ${a.hidden ? "" : "checked"}><i></i></label>
         <label class="switch"><span>Öne çıkan (ana sayfada büyük kart)</span><input type="checkbox" name="featured" ${a.featured ? "checked" : ""}><i></i></label>
+        <label class="switch"><span>Sadece yönetici (yalnızca ben görürüm; güncellemeleri yalnızca Yönetim uygulamasında çıkar)</span><input type="checkbox" name="adminOnly" ${a.adminOnly ? "checked" : ""}><i></i></label>
       </section>
 
       <section class="form-sec glass"><h4><em>2</em>Görseller</h4>
@@ -380,10 +530,10 @@
       <section class="form-sec glass"><h4><em>🧪</em>Test sürümü</h4>
         <label class="switch"><span>Bu uygulamanın test sürümü var</span><input type="checkbox" name="hasBeta" ${a.beta ? "checked" : ""}><i></i></label>
         <div id="betaFields">
-          <p class="help" style="margin-top:0">Sadece <b>testçi</b> olarak işaretlediğin kişiler görür. Diğerleri yayındaki sürümü görmeye devam eder.</p>
+          <p class="help" style="margin-top:0">Test sürümü yalnızca site üzerinden açılır (uygulama olarak kurulmaz). Kimlerin göreceğini <b>Kişiler → Test erişimi</b>'nden seçersin; testi açılmayan kişi bunu görmez.</p>
           <div class="cols"><label class="field"><span>Test sürümü</span><input class="inp" name="b_version" value="${b.version}" placeholder="1.3.0-test"></label>
             <label class="field"><span>Tarih</span><input class="inp" type="date" name="b_updated" value="${(b.updated || new Date().toISOString().slice(0, 10)).slice(0, 10)}"></label></div>
-          <label class="field"><span>Bağlantı (APK ya da web adresi)</span><input class="inp" name="b_url" value="${b.apkUrl || b.webUrl}" inputmode="url" placeholder="https://…"></label>
+          <label class="field"><span>Test sitesi adresi</span><input class="inp" name="b_url" value="${b.webUrl}" inputmode="url" placeholder="https://azataslan065-png.github.io/…/test/"></label>
           <label class="field"><span>Testçilere notlar</span><textarea class="inp sm" name="b_notes" placeholder="Her satıra bir not: neyi denesinler?">${lines(b.notes)}</textarea></label>
           ${a.beta ? raw('<button type="button" class="btn ok block" id="promote">Test sürümünü herkese yayınla</button>') : ""}
         </div>
@@ -517,7 +667,7 @@
       if (!(await confirmDlg("Test sürümü herkese yayınlansın mı?", `v${F.b_version.value} ana sürüm olur, test sürümü kapanır. Kaydedip yayınlaman gerekir.`, "Aktar"))) return;
       const url = F.b_url.value.trim();
       F.version.value = F.b_version.value.trim(); F.updated.value = new Date().toISOString().slice(0, 10);
-      if (F.kind.value === "web") F.webUrl.value = url; else F.apkUrl.value = url;
+      if (F.kind.value === "web") F.webUrl.value = url;
       if (F.b_notes.value.trim()) F.whatsNew.value = F.b_notes.value;
       F.hasBeta.checked = false; betaSync(); toast("Aktarıldı · şimdi kaydet", "ok");
     };
@@ -537,7 +687,8 @@
       if (!existing && db.apps.some((x) => x.id === nid)) { F.id.classList.add("err"); return alertErr("Bu kimlik kullanılıyor", `"${nid}" kimlikli bir uygulama zaten var. Farklı bir kimlik yaz.`); }
       const urlEl = web ? F.webUrl : F.apkUrl;
       if (urlEl.value.trim() && !/^https:\/\/\S+$/i.test(urlEl.value.trim())) { urlEl.classList.add("err"); return alertErr("Bağlantı geçersiz", "Bağlantı https:// ile başlayan tam bir adres olmalı."); }
-      if (F.hasBeta.checked && (!F.b_version.value.trim() || !/^https:\/\/\S+$/i.test(F.b_url.value.trim()))) { (F.b_version.value.trim() ? F.b_url : F.b_version).classList.add("err"); return alertErr("Test sürümü eksik", "Test sürümü için sürüm numarası ve https:// ile başlayan bağlantı gerekli. İstemiyorsan anahtarı kapat."); }
+      if (F.hasBeta.checked && (!F.b_version.value.trim() || !/^https:\/\/\S+$/i.test(F.b_url.value.trim()))) { (F.b_version.value.trim() ? F.b_url : F.b_version).classList.add("err"); return alertErr("Test sürümü eksik", "Test sürümü için sürüm numarası ve https:// ile başlayan site adresi gerekli. İstemiyorsan anahtarı kapat."); }
+      if (F.hasBeta.checked && /\.apk(\?|#|$)/i.test(F.b_url.value.trim())) { F.b_url.classList.add("err"); return alertErr("Test sürümü site olmalı", "Test sürümü uygulama olarak kurulmaz; APK yerine test sitesinin adresini yaz."); }
       if (errs.length) { const first = $(".inp.err", f); first && first.scrollIntoView({ behavior: "smooth", block: "center" }); return alertErr("Eksik alanlar var", errs.join(", ") + " doldurulmalı."); }
       const split = (v) => v.split("\n").map((s) => s.trim()).filter(Boolean);
       Object.assign(a, {
@@ -547,7 +698,8 @@
         size: F.size.value.trim(), minAndroid: F.minAndroid.value.trim(), downloads: Math.max(0, +F.downloads.value || 0),
         features: split(F.features.value), whatsNew: split(F.whatsNew.value), knownIssues: split(F.knownIssues.value),
         requirements: { android: F.r_android.value.trim(), ram: F.r_ram.value.trim(), storage: F.r_storage.value.trim(), permissions: split(F.r_perm.value) },
-        beta: F.hasBeta.checked ? { version: F.b_version.value.trim(), updated: F.b_updated.value, notes: split(F.b_notes.value), [/\.apk(\?|$)/i.test(F.b_url.value) || F.kind.value === "apk" ? "apkUrl" : "webUrl"]: F.b_url.value.trim() } : null
+        adminOnly: F.adminOnly.checked,
+        beta: F.hasBeta.checked ? { version: F.b_version.value.trim(), updated: F.b_updated.value, notes: split(F.b_notes.value), webUrl: F.b_url.value.trim() } : null
       });
       // sürüm değiştiyse: önceki sürümün dosyasını "eski sürüm" olarak sakla, yenilikleri geçmişe ekle
       if (prevVersion && prevVersion !== a.version && prevLink && prevLink !== D.linkOf(a)) {
@@ -569,7 +721,7 @@
   function settings() {
     setTab("ayarlar");
     const st = db.store, tok = D.GitHub.token;
-    const snippet = `<script src="${C.siteUrl}guncelle.js" data-uygulama="UYGULAMA-KIMLIGI" data-surum="1.0.0"><\/script>`;
+    const snippet = `<script src="${C.rootUrl || C.siteUrl}guncelle.js" data-uygulama="UYGULAMA-KIMLIGI" data-surum="1.0.0"><\/script>`;
     view.innerHTML = html`<div class="view"><div class="sec-h" style="margin-top:14px"><h2>Ayarlar</h2></div>
       <section class="form-sec glass"><h4><em>★</em>Mağaza bilgileri</h4>
         <label class="field"><span>Mağaza adı</span><input class="inp" id="sName" value="${st.name}" maxlength="40"></label>

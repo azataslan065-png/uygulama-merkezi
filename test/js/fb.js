@@ -99,6 +99,7 @@
         (top === "gclaims" && parts(p)[1] === this.uid) ||
         (top === "gelistirici" && parts(p).length === 2 && dig(d, "gclaims/" + this.uid) === parts(p)[1]) ||
         (top === "gapps" && parts(p)[1] && this._dev(parts(p)[1])) ||
+        (top === "gapps" && this._member()) ||
         (top === "invites" && parts(p).length === 2 && dig(d, "claims/" + this.uid) === parts(p)[1]) ||
         (top === "claims" && parts(p)[1] === this.uid);
       if (!ok) throw this._deny();
@@ -107,7 +108,7 @@
     async set(p, v) {
       const top = parts(p)[0], d = mget();
       if (top === "gclaims") { if (parts(p)[1] !== this.uid || (v && !(dig(d, "gelistirici/" + v) || {}).active)) throw this._deny(); }
-      else if (top === "gapps" && !this._owner()) { if (!this._dev(parts(p)[1])) throw this._deny(); }
+      else if (["gapps", "parca", "yukleme"].includes(top) && !this._owner()) { if (!this._dev(parts(p)[1])) throw this._deny(); }
       else if (top === "claims") { if (parts(p)[1] !== this.uid || (v && !(dig(d, "invites/" + v) || {}).active)) throw this._deny(); }
       else if (top === "owner") { if (d.owner || v !== this.uid) throw this._deny(); }
       else if (!this._owner() && !(["members", "events", "reviews", "reports", "push"].includes(top) && this._member())) throw this._deny();

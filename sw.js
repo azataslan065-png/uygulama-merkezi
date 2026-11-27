@@ -2,8 +2,8 @@
  * Uygulama kabuğu önbellekten açılır (hızlı + çevrimdışı); görseller önce ağdan istenir.
  * Telefon bildirimleri (web push) burada gösterilir. Kabuk dosyalarından biri değiştiğinde SURUM'ü artır.
  */
-const SURUM = "um-v6";
-const KABUK = ["./", "index.html", "css/app.css", "js/config.js", "js/ui.js", "js/fb.js", "js/data.js", "js/store.js", "js/qrcode.js", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png"];
+const SURUM = "um-v7";
+const KABUK = ["./", "index.html", "css/app.css", "css/play.css", "js/config.js", "js/ui.js", "js/fb.js", "js/data.js", "js/store.js", "js/qrcode.js", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png"];
 
 /* (2026-11-21) KÖK SEBEP ("yeni düzen telefonda görünmüyor"): kabuk önce önbellekten açılıyordu; güncelleme de tarayıcının HTTP
    önbelleğinden (GitHub Pages 10 dk) eski kopyayı alıp yeniden saklayabiliyordu. ŞİMDİ: kabuk dosyaları her zaman önce AĞDAN

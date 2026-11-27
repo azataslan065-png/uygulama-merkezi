@@ -330,8 +330,46 @@
     async me() { const c = this.code() || (await FB.get("gclaims/" + FB.uid).catch(() => null)); if (!c) return null; LS.set("um.devCode", c); const d = await FB.get("gelistirici/" + c).catch(() => null); return d ? Object.assign({ code: c }, d) : null; },
     async apps(code) { const v = (await FB.get("gapps/" + code)) || {}; return Object.keys(v).map((k) => Object.assign({ id: k }, v[k])); },
     save(code, id, app) { return FB.set(`gapps/${code}/${id}`, app); },
-    remove(code, id) { return FB.remove(`gapps/${code}/${id}`); }
+    remove(code, id) { return FB.remove(`gapps/${code}/${id}`); },
+    /* Dosya yükleme (2026-11-27): geliştiricide GitHub anahtarı yoktur. Dosya telefondan parçalar hâlinde Firebase'e yazılır
+       (um/parca/<kod>/<dosya>/<n>), en son künyesi (um/yukleme/<kod>/<dosya>) eklenir. Sunucudaki GitHub görevi
+       (futbol-ligi/.github/workflows/um-gelistirici.yml) dosyayı GitHub'a aktarır, uygulama kaydındaki "yukleniyor:<dosya>"
+       yer tutucusunu gerçek adresle değiştirir ve parçaları siler. */
+    PARCA: 512 * 1024,
+    newId() { return [...crypto.getRandomValues(new Uint8Array(8))].map((b) => b.toString(16).padStart(2, "0")).join(""); },
+    async uploadAs(code, appId, alan, blob, name, id, onProg = () => {}) {
+      const n = Math.ceil(blob.size / this.PARCA) || 1;
+      const meta = { app: appId, alan, ad: String(name || alan).slice(0, 120), tur: blob.type || "", boyut: blob.size, parca: n, t: Date.now(), durum: "yukleniyor" };
+      await FB.set(`yukleme/${code}/${id}`, meta);   // yarıda kalırsa sunucu 6 saat sonra temizler
+      for (let i = 0; i < n; i++) {
+        const b64 = await b64FromBlob(blob.slice(i * this.PARCA, (i + 1) * this.PARCA));
+        await FB.set(`parca/${code}/${id}/${i}`, b64);
+        onProg((i + 1) / n);
+      }
+      await FB.set(`yukleme/${code}/${id}`, Object.assign(meta, { durum: "hazir" }));
+      return id;
+    }
   };
+  const PH = /^yukleniyor:/;
+  /* Mağaza için geliştirici uygulamaları: yönetici yayından kaldırmadıysa ve dosyaları hazırsa görünür */
+  async function loadDevApps() {
+    let v; try { v = (await FB.get("gapps")) || {}; } catch { return []; }
+    const out = [];
+    Object.entries(v).forEach(([code, l]) => Object.entries(l || {}).forEach(([id, x]) => {
+      if (!x || x.engel) return;
+      const web = x.kind === "web", main = web ? x.webUrl : x.apkUrl;
+      if (!main || PH.test(main)) return;
+      const ok = (u) => (u && !PH.test(u) ? u : "");
+      out.push(Object.assign(normApp({
+        id: "g-" + code + "-" + id, name: x.name, short: x.short, description: x.description, category: x.category, kind: web ? "web" : "apk",
+        webUrl: web ? x.webUrl : "", apkUrl: web ? "" : x.apkUrl, paket: x.paket, apkMs: x.apkMs, size: x.size, minAndroid: x.minAndroid,
+        version: x.version || "1.0", updated: x.updated || (x.t ? new Date(x.t).toISOString().slice(0, 10) : ""), created: x.created || "",
+        features: x.features, whatsNew: x.whatsNew, icon: ok(x.icon), video: ok(x.video), screenshots: arr(x.screenshots).map(ok).filter(Boolean),
+        dev: code, devId: id, devName: x.devName || ""
+      }), { fromDev: true }));
+    }));
+    return out;
+  }
 
   /* ---------- kullanıcıya özel yerel veriler ---------- */
   const user = {
@@ -345,5 +383,5 @@
     setInboxSeen(t) { LS.set("um.inboxSeen", t); }
   };
 
-  window.UMData = { dev, pkgsOf, loadOzel, guessPackage, uploadVideo, packagesOf, normalize, normApp, normBeta, linkOf, loadCatalog, loadBeta, draft, publish, changes, GitHub, releases, versionFrom, notesFrom, parseRepo, releaseStats, parseRelease, member, user, LS, arr };
+  window.UMData = { loadDevApps, dev, pkgsOf, loadOzel, guessPackage, uploadVideo, packagesOf, normalize, normApp, normBeta, linkOf, loadCatalog, loadBeta, draft, publish, changes, GitHub, releases, versionFrom, notesFrom, parseRepo, releaseStats, parseRelease, member, user, LS, arr };
 })();

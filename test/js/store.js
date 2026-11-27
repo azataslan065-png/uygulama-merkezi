@@ -8,7 +8,7 @@
   const { $, $$, html, raw, I, toast, alertErr, modal, shareSheet, fmtNum, fmtDate, fmtSize, ago, appIcon, starsHtml, readImage } = UI;
   const D = UMData, C = UM_CONFIG;
   const view = $("#view");
-  const state = { db: null, ozel: [], offline: false, q: "", cat: "Tümü", stats: {}, invite: null, beta: {}, reviews: {}, inbox: [], busy: {}, pendingV: {}, cands: {} };
+  const state = { db: null, ozel: [], dev: [], offline: false, q: "", cat: "Tümü", stats: {}, invite: null, beta: {}, reviews: {}, inbox: [], busy: {}, pendingV: {}, cands: {} };
   // Uygulama Merkezi Android uygulamasının içinde mi açıldı? (köprü: android/…/Ana.java "UMYerel")
   const Y = window.UMYerel || null;
   const STORE_APK = "https://github.com/" + C.repo.owner + "/" + C.repo.name + "/releases/download/apk/Uygulama-Merkezi.apk";
@@ -29,7 +29,7 @@
   addEventListener("scroll", () => $("#topbar").classList.toggle("scrolled", scrollY > 4), { passive: true });
 
   /* ---------- yardımcılar ---------- */
-  const allApps = () => state.db.apps.concat(state.ozel);
+  const allApps = () => state.db.apps.concat(state.ozel, state.dev);
   const visibleApps = () => allApps().filter((a) => !a.hidden);
   const byId = (id) => visibleApps().find((a) => a.id === id);
   const isWeb = (a) => a.kind === "web";
@@ -478,6 +478,7 @@
       catch (e) { if (e.code === "denied") { localStorage.removeItem("um.invite"); return gate("Davetin artık geçerli değil. Mağaza sahibinden yeni bir davet iste."); } throw e; }
       state.db = r.db; state.offline = r.offline;
       if (owner) state.ozel = await D.loadOzel();
+      state.dev = (await D.loadDevApps()).filter((a) => !state.db.apps.some((x) => x.id === a.id));
       state.beta = await D.loadBeta(inv);
       $("#storeName").textContent = r.db.store.name; document.title = r.db.store.name;
       render();
