@@ -1,12 +1,21 @@
 {
-  "updatedAt": "2026-11-25T16:59:42.382Z",
+  "updatedAt": "2026-11-27T10:04:30.272Z",
   "apps": {
+    "kumbara": {
+      "name": "Kumbara",
+      "version": "1.2.0",
+      "updated": "2026-11-27",
+      "paket": "",
+      "apkMs": 0,
+      "url": "https://content://media/external/file/1000277660",
+      "store": "https://azataslan065-png.github.io/uygulama-merkezi/#/app/kumbara"
+    },
     "hayal-motoru": {
       "name": "Hayal Motoru",
       "version": "5",
       "updated": "2026-11-25",
       "paket": "com.azat.hayalmotoru",
-      "apkMs": 1795623854000,
+      "apkMs": 1795768139000,
       "url": "https://github.com/azataslan065-png/hayal-motoru/releases/download/apk/HayalMotoru.apk",
       "store": "https://azataslan065-png.github.io/uygulama-merkezi/#/app/hayal-motoru"
     },
