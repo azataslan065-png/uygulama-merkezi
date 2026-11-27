@@ -1,0 +1,17 @@
+{
+  "name": "Uygulama Merkezi",
+  "short_name": "Uygulamalar",
+  "description": "Kişisel, davetle girilen uygulama mağazası",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#07070c",
+  "theme_color": "#07070c",
+  "lang": "tr",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
