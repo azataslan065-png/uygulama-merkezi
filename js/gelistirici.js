@@ -64,7 +64,7 @@
         <label class="field"><span>Özellikler</span><textarea class="inp sm" name="features" placeholder="Her satıra bir özellik">${a.features || ""}</textarea></label>
       </section>
       <section class="form-sec"><h4><em>2</em>Uygulama dosyası</h4>
-        <div class="field" data-for="apk"><span>APK dosyası${ok(a.apkUrl) ? "" : " *"}</span><label class="drop"><input type="file" accept=".apk,application/vnd.android.package-archive" data-file="apk"><div class="pv">${raw(I.dl)}</div><div><b id="apkT">${ok(a.apkUrl) ? "Yeni APK seç (güncelleme)" : "APK seç"}</b><small id="apkS">${ok(a.apkUrl) ? "Şu anki sürüm " + esc(a.version || "") : "En fazla 100 MB"}</small></div></label></div>
+        <div class="field" data-for="apk"><span>APK dosyası${ok(a.apkUrl) ? "" : " *"}</span><label class="drop"><input type="file" data-file="apk"><div class="pv">${raw(I.dl)}</div><div><b id="apkT">${ok(a.apkUrl) ? "Yeni APK seç (güncelleme)" : "APK seç"}</b><small id="apkS">${ok(a.apkUrl) ? "Şu anki sürüm " + esc(a.version || "") : "En fazla 100 MB"}</small></div></label></div>
         <label class="field" data-for="web"><span>Web adresi *</span><input class="inp" name="webUrl" value="${a.webUrl || ""}" inputmode="url" placeholder="https://…"></label>
         <div class="cols"><label class="field"><span>Sürüm</span><input class="inp" name="version" value="${a.version || ""}" maxlength="20" placeholder="APK'dan okunur"></label>
           <label class="field" data-for="apk"><span>Min. Android</span><input class="inp" name="minAndroid" value="${a.minAndroid || ""}" maxlength="8" placeholder="7.0"></label></div>
@@ -92,7 +92,10 @@
       const k = inp.dataset.file;
       try {
         if (k === "apk") {
-          const fl = files[0]; if (!/\.apk$/i.test(fl.name)) throw new Error("Bir .apk dosyası seç.");
+          // (2026-11-27) KÖK SEBEP ("geliştirici dosya yükleyemiyor"): seçiciye ".apk" türü veriliyordu; Android bunu dosya türü olarak
+          // tanımıyor ve seçicide hiçbir dosya göstermiyordu. Artık seçici tüm dosyaları gösterir; APK olduğu içeriğinden anlaşılır (ZIP imzası).
+          const fl = files[0], bas = new Uint8Array(await fl.slice(0, 4).arrayBuffer());
+          if (!(bas[0] === 0x50 && bas[1] === 0x4b) || (!/\.apk$/i.test(fl.name) && !/android|octet|zip/i.test(fl.type || ""))) throw new Error("Seçilen dosya APK değil. Uygulamanın .apk dosyasını seç (genelde İndirilenler klasöründe).");
           if (fl.size > MAX_APK) throw new Error(`APK ${fmtSize(fl.size)}; en fazla 100 MB olabilir.`);
           nw.apk = fl; $("#apkT").textContent = fl.name; $("#apkS").textContent = fmtSize(fl.size) + " · gönderince yüklenir"; return;
         }
