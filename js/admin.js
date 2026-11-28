@@ -124,7 +124,7 @@
   const totalDownloads = () => db.apps.reduce((s, a) => s + dlCount(a.id), 0);
   function ratingOf(id) { const r = Object.values(live.reviews[id] || {}); if (!r.length) return null; return { avg: r.reduce((s, x) => s + (+x.stars || 0), 0) / r.length, n: r.length }; }
   const randCode = () => { const a = "abcdefghjkmnpqrstuvwxyz23456789"; return [...crypto.getRandomValues(new Uint8Array(10))].map((b) => a[b % a.length]).join(""); };
-  const inviteUrl = (code) => (C.rootUrl || C.siteUrl) + "?d=" + code;
+  const inviteUrl = (code) => C.siteUrl + "?d=" + code;   // test mağazasının davetleri ayrı veritabanında
   const membersOf = (code) => Object.entries(live.members).filter(([, m]) => m && m.code === code).map(([uid, m]) => Object.assign({ uid }, m));
   const appName = (id) => (db.apps.find((a) => a.id === id) || {}).name || id;
   const appCur = (id) => (db.apps.find((a) => a.id === id) || {}).version;
@@ -560,7 +560,7 @@
       try {
         const t = Date.now();
         if (hedef === "hepsi") await FB.push("inbox", { title, body, app, t });
-        if ($("#anP").checked) await FB.push("pushQueue", { title, body, link: (C.rootUrl || C.siteUrl) + (app ? "#/app/" + encodeURIComponent(app) : "#/bildirimler"), hedef, durum: "bekliyor", t });
+        if ($("#anP").checked) await FB.push("pushQueue", { title, body, link: C.siteUrl + (app ? "#/app/" + encodeURIComponent(app) : "#/bildirimler"), hedef, durum: "bekliyor", t });
         loading(false); toast("Duyuru gönderildi", "ok"); await loadLive(["queue"]);
       } catch (e) { loading(false); alertErr("Gönderilemedi", e.message); }
     };

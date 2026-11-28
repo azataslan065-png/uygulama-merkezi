@@ -16,11 +16,11 @@ window.UM_CONFIG = Object.freeze({
   },
   sdk: "https://www.gstatic.com/firebasejs/10.12.0/",
   appCheckKey: "6Ld4-4EtAAAAAPC1eNtLyCC-w74V0PGwFAz9Cpbf",
-  root: "um",
+  root: "umtest",                         // (2026-11-28) test mağazasının veritabanı ayrı (kök: "um")
   repo: { owner: "azataslan065-png", name: "uygulama-merkezi", branch: "main" },
   ghOwner: "azataslan065-png",            // "GitHub'dan doldur" için varsayılan hesap
   assetsDir: "assets/apps",
-  versionsPath: "guncelleme/surumler.json",
+  versionsPath: "guncelleme/surumler-test.json",   // test yayınları uygulamaların okuduğu gerçek sürüm dosyasına dokunmaz
   siteUrl: "https://azataslan065-png.github.io/uygulama-merkezi/test/",
   rootUrl: "https://azataslan065-png.github.io/uygulama-merkezi/",   // kök (sürüm dosyası, uygulama içi bağlantılar); test kopyasında da aynı kalır
   statsTtlMs: 10 * 60 * 1000
