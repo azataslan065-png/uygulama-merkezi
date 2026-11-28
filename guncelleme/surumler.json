@@ -1,6 +1,15 @@
 {
-  "updatedAt": "2026-11-28T14:27:22.386Z",
+  "updatedAt": "2026-11-28T14:32:13.504Z",
   "apps": {
+    "uyanan-savasci": {
+      "name": "Uyanan Savasci",
+      "version": "1.0.4",
+      "updated": "2026-11-28",
+      "paket": "com.azat.uyanansavasci",
+      "apkMs": 1795876309000,
+      "url": "https://github.com/azataslan065-png/futbol-ligi/releases/download/um-gelistirici/s-y-uyanan-savasci-1795876309062.apk",
+      "store": "https://azataslan065-png.github.io/uygulama-merkezi/#/app/uyanan-savasci"
+    },
     "sihirli-el": {
       "name": "Sihirli El",
       "version": "1.0.5",
