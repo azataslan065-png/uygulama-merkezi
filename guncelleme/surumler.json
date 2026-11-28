@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-28T08:58:24.678Z",
+  "updatedAt": "2026-11-28T09:00:16.647Z",
   "apps": {
     "kumanda": {
       "name": "Kumanda",
@@ -30,7 +30,7 @@
     },
     "yonetim-paneli": {
       "name": "Yönetim Paneli",
-      "version": "94",
+      "version": "1.4.0",
       "updated": "2026-11-28",
       "paket": "com.azat.adminkok",
       "apkMs": 1795854473000,
