@@ -1,4 +1,14 @@
 {
-  "updatedAt": "2026-11-28T06:34:01.808Z",
-  "apps": {}
+  "updatedAt": "2026-11-28T07:05:45.992Z",
+  "apps": {
+    "azataslan065-png-cizim-atolyesi": {
+      "name": "azataslan065-png/cizim-atolyesi",
+      "version": "1.0.0",
+      "updated": "2026-11-28",
+      "paket": "",
+      "apkMs": 0,
+      "url": "https://azataslan065-png.github.io/cizim-atolyesi/",
+      "store": "https://azataslan065-png.github.io/uygulama-merkezi/#/app/azataslan065-png-cizim-atolyesi"
+    }
+  }
 }
