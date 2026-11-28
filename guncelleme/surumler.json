@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-28T07:44:07.250Z",
+  "updatedAt": "2026-11-28T07:47:58.727Z",
   "apps": {
     "skorbord": {
       "name": "Skorbord",
@@ -12,7 +12,7 @@
     },
     "azataslan065-png-cizim-atolyesi": {
       "name": "Çizim Atölyesi",
-      "version": "1.0.5",
+      "version": "1.0.0",
       "updated": "2026-11-28",
       "paket": "com.azat.cizim",
       "apkMs": 1795850322000,
