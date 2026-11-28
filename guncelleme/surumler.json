@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-28T08:29:49.994Z",
+  "updatedAt": "2026-11-28T08:30:26.555Z",
   "apps": {
     "kumanda": {
       "name": "Kumanda",
@@ -35,7 +35,8 @@
       "paket": "com.azat.adminkok",
       "apkMs": 1795854473000,
       "url": "https://github.com/azataslan065-png/futbol-ligi/releases/download/um-gelistirici/s-y-yonetim-paneli-1795854472934.apk",
-      "store": "https://azataslan065-png.github.io/uygulama-merkezi/#/app/yonetim-paneli"
+      "store": "https://azataslan065-png.github.io/uygulama-merkezi/#/app/yonetim-paneli",
+      "yonetici": true
     }
   }
 }
