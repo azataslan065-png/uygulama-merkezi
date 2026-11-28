@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-28T15:14:46.629Z",
+  "updatedAt": "2026-11-28T15:19:37.404Z",
   "apps": {
     "haykir": {
       "name": "Haykir",
@@ -21,7 +21,7 @@
     },
     "sihirli-el": {
       "name": "Sihirli El",
-      "version": "1.0.5",
+      "version": "1.0.0",
       "updated": "2026-11-28",
       "paket": "com.azat.sihirliel",
       "apkMs": 1795876017000,
