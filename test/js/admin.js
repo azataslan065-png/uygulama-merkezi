@@ -80,7 +80,7 @@
     loadLive();
     db.apps.forEach(async (a) => { const s = a.kind === "apk" && (await D.releaseStats(a.apkUrl)); if (s) { stats[a.id] = s; if (route() === "panel") { panelKpis(); if (a.adminOnly) ownRefresh(); } } });
     setTimeout(ownUpdateNotice, 3500);
-    applyPendingPins().then(pinUnpinned);
+    applyPendingPins().then(fixTestSources).then(pinUnpinned);
   }
   async function loadLive(keys = ["invites", "members", "claims", "events", "reviews", "reports", "queue", "devs", "gapps", "sayac"]) {
     const path = { queue: "pushQueue", devs: "gelistirici" };
@@ -208,6 +208,24 @@
     const done = [];
     db.apps.forEach((a) => { const x = all[a.id]; if (x && x.durum === "tamam" && x.ms > (a.apkMs || 0) && x.url !== a.apkUrl && (!a.kaynak || x.kaynak === a.kaynak)) { applyPin(a, x); done.push(a.name); } });
     if (done.length) { save("Yeni sürüm hazır: " + done.join(", ")); render(); }
+  }
+  /* Test APK'sıyla eklenmiş uygulamalar (ör. Skorbord-Test.apk): kök APK'ya çevrilir, test sitesi "test sürümü" olarak bağlanır,
+     kök sürüm sabitlenir. Yayınlayınca mağazada kök uygulama, test erişimi olanlara "Bu uygulama için test sürümü mevcut" çıkar. */
+  async function fixTestSources() {
+    const l = db.apps.filter((a) => a.kind !== "web" && D.isTestUrl(a.kaynak || a.apkUrl));
+    const done = [];
+    for (const a of l) {
+      try {
+        const p = D.parseRelease(a.kaynak || a.apkUrl), info = await D.releases(p.owner + "/" + p.repo);
+        const rel = D.rootRelease(info.releases); if (!rel) continue;
+        const apk = D.rootApks(rel)[0]; a.kaynak = apk.url;
+        if (!a.beta) { const site = await D.testSite(p.owner, p.repo), tr = D.testRelease(info.releases); if (site) a.beta = { version: tr ? D.versionFrom(tr) : "test", webUrl: site, apkUrl: "", notes: [], updated: today() }; }
+        a.changelog = a.changelog.filter((c) => !D.isTestUrl(c.url));
+        try { await pinApp(a, true); } catch { a.apkUrl = apk.url; }
+        done.push(a.name);
+      } catch {}
+    }
+    if (done.length) { save("Kök sürüme çevrildi, test sitesi bağlandı: " + done.join(", ")); render(); dialog({ title: "Kök sürüme çevrildi", message: done.join(", ") + " artık mağazada kök (kararlı) APK ile görünüyor; test sürümü yalnızca sitesinden açılır. Kişiler → Test erişimi'nden kimlerin göreceğini seç, sonra Yayınla.", type: "ok" }); }
   }
   // Henüz sabitlenmemiş uygulamalar (her GitHub yüklemesi doğrudan kullanıcıya gidiyordu): bir kez sabitlenir
   async function pinUnpinned() {
@@ -734,8 +752,8 @@
         const m = modal(`<h3>Hangi dosya?</h3><p>Son sürümde birden fazla APK var.</p>${rel.apks.map((x, i) => `<button class="btn ghost block" data-k="${i}" style="margin-bottom:8px">${esc(x.name)} · ${fmtSize(x.size)}</button>`).join("")}`, { onClose: () => res(null) });
         $$("[data-k]", m.el).forEach((x) => x.onclick = () => { res(rel.apks[+x.dataset.k]); m.close(); });
       });
-      const rel = withApk.find((r) => !r.pre) || withApk[0];
-      const apk = await pickApk(rel); if (!apk) return;
+      const rel = D.rootRelease(withApk) || withApk[0];
+      const apk = await pickApk(Object.assign({}, rel, { apks: D.rootApks(rel) })); if (!apk) return;
       F.kind.value = "apk"; kindSync();
       F.apkUrl.value = apk.url; F.size.value = fmtSize(apk.size); F.version.value = D.versionFrom(rel); F.updated.value = (apk.updated || rel.date || "").slice(0, 10);
       // (2026-11-28) apkMs yalnızca sabitlenen sürümden gelir; kaynağın zamanı yazılmaz (yoksa kullanıcıya eski dosyayla "Güncelle" çıkardı)
@@ -745,7 +763,10 @@
       else if (pk.length > 1 && !F.paket.value) toast("Bu depoda birden fazla uygulama var; paket adını elle yaz (" + pk.join(", ") + ")", "warn", 6000);
       const notes = D.notesFrom(rel.body); if (notes.length) F.whatsNew.value = notes.join("\n");
       // eski sürümler (aynı adlı APK'yı içeren önceki sürümler) → geçmiş
-      const olds = withApk.filter((r) => r !== rel).map((r) => ({ r, x: r.apks.find((x) => x.name === apk.name) || r.apks[0] })).filter((o) => o.x && o.x.url !== apk.url);
+      // test sürümü varsa: mağazaya APK olarak girmez, test sitesi "test sürümü" olarak bağlanır
+      const tr = D.testRelease(info.releases), site = await D.testSite(info.owner, info.repo);
+      if (site) { F.hasBeta.checked = true; betaSync(); F.b_url.value = site; F.b_version.value = tr ? D.versionFrom(tr) : F.b_version.value || "test"; }
+      const olds = withApk.filter((r) => r !== rel && !D.isTestUrl((r.apks[0] || {}).url) && !/test|deneme/i.test(r.tag)).map((r) => ({ r, x: r.apks.find((x) => x.name === apk.name) || r.apks[0] })).filter((o) => o.x && o.x.url !== apk.url);
       let added = 0;
       olds.forEach(({ r, x }) => { const v = D.versionFrom(r); if (a.changelog.some((c) => c.version === v)) { const c = a.changelog.find((c) => c.version === v); if (!c.url) { c.url = x.url; added++; } return; } a.changelog.push({ version: v, date: r.date, notes: D.notesFrom(r.body).slice(0, 6), url: x.url }); added++; });
       a.changelog.sort((x, y) => (y.date || "").localeCompare(x.date || "")); drawCl();

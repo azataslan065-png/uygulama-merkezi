@@ -124,8 +124,9 @@
       loading(true, "GitHub'dan alınıyor…");
       try {
         const info = await D.releases(repo.replace(/^https?:\/\/github\.com\//i, ""));
-        const rel = info.releases.find((r) => r.apks.length && !r.pre) || info.releases.find((r) => r.apks.length);
+        const rel = D.rootRelease(info.releases.filter((r) => r.apks.length)) || info.releases.find((r) => r.apks.length);
         if (!rel) throw new Error("Bu deponun yayınlanmış sürümlerinde (Releases) .apk dosyası yok. Önce GitHub'da bir sürüm yayınlayıp APK'yı ekle.");
+        rel.apks = D.rootApks(rel);   // test APK'sı mağazaya girmez
         let apk = rel.apks[0];
         if (rel.apks.length > 1) { loading(false); apk = await new Promise((res) => { const m = UI.modal(`<h3>Hangi APK?</h3><p>Son sürümde birden fazla APK var.</p>${rel.apks.map((x, i) => `<button class="btn ghost block" data-k="${i}" style="margin-bottom:8px">${esc(x.name)} · ${fmtSize(x.size)}</button>`).join("")}`, { onClose: () => res(null) }); $$("[data-k]", m.el).forEach((x) => x.onclick = () => { res(rel.apks[+x.dataset.k]); m.close(); }); }); if (!apk) return; loading(true, "GitHub'dan alınıyor…"); }
         const pk = await D.packagesOf(info.owner, info.repo);

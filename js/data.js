@@ -280,6 +280,19 @@
     if (pk.length) { cache[key] = v; LS.set("um.pkgGuess2", cache); }
     return v;
   }
+  /* (2026-11-28) Mağazaya her zaman KÖK (kararlı) APK girer; test APK'sı uygulama olarak dağıtılmaz, test yalnızca sitesinden açılır.
+     Önceden "son yayınlanan sürüm" alınıyordu; Skorbord'da en yeni sürüm "apk-test" olduğu için test APK'sı mağazaya girmişti. */
+  const TESTRE = /test|deneme/i;
+  const isTestRel = (r) => TESTRE.test(r.tag + " " + r.name);
+  function rootRelease(rels) { const w = rels.filter((r) => r.apks.some((x) => !TESTRE.test(x.name)) && !isTestRel(r)); return w.find((r) => !r.pre) || w[0] || null; }
+  const rootApks = (rel) => { const l = rel.apks.filter((x) => !TESTRE.test(x.name)); return l.length ? l : rel.apks; };
+  const testRelease = (rels) => rels.find((r) => isTestRel(r) || (r.apks.length && r.apks.every((x) => TESTRE.test(x.name)))) || null;
+  // Deponun test sitesi (…/<depo>/test/) varsa adresi
+  async function testSite(owner, repo) {
+    try { const r = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/test`, { headers: GitHub.headers() }); if (r.ok) return `https://${owner}.github.io/${repo}/test/`; } catch {}
+    return "";
+  }
+  const isTestUrl = (u) => { const p = parseRelease(u); return !!(p && TESTRE.test(p.tag + " " + p.file)); };
   // sürüm adından okunabilir numara: "v1.2.0" → "1.2.0"; numarasız etiketlerde ("apk") tarih kullanılır
   function versionFrom(rel) {
     const m = `${rel.name} ${rel.tag}`.match(/v?(\d+(?:\.\d+){0,3}(?:[-.][\w]+)?)/i);
@@ -423,5 +436,5 @@
     setInboxSeen(t) { LS.set("um.inboxSeen", t); }
   };
 
-  window.UMData = { pin, isPinned, pickPackage, loadDevApps, dev, pkgsOf, loadOzel, guessPackage, uploadVideo, packagesOf, normalize, normApp, normBeta, linkOf, loadCatalog, loadBeta, draft, publish, changes, GitHub, releases, versionFrom, notesFrom, parseRepo, releaseStats, parseRelease, member, user, LS, arr };
+  window.UMData = { rootRelease, rootApks, testRelease, testSite, isTestUrl, pin, isPinned, pickPackage, loadDevApps, dev, pkgsOf, loadOzel, guessPackage, uploadVideo, packagesOf, normalize, normApp, normBeta, linkOf, loadCatalog, loadBeta, draft, publish, changes, GitHub, releases, versionFrom, notesFrom, parseRepo, releaseStats, parseRelease, member, user, LS, arr };
 })();
