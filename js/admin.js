@@ -194,20 +194,9 @@
     }
     a.updated = today();
   }
-  /* (2026-11-28) Kaynak alanına APK bağlantısı yerine depo adresi yazılırsa (ör. github.com/kullanici/depo ya da kullanici/depo)
-     deponun son kök sürümündeki APK bulunur. Önceden bu durumda sunucu dosyayı indiremiyordu. */
-  async function resolveKaynak(u) {
-    u = String(u || "").trim();
-    if (D.parseRelease(u)) return u;
-    const r = D.parseRepo(u.replace(/^https?:\/\//i, "").replace(/^(www\.)?github\.com\//i, ""));
-    if (!r) throw new Error("APK kaynağı anlaşılmadı. GitHub deposunu (kullanici/depo) ya da APK bağlantısını yaz.");
-    const info = await D.releases(r.owner + "/" + r.repo);
-    const rel = D.rootRelease(info.releases.filter((x) => x.apks.length));
-    if (!rel) throw new Error(`${r.owner}/${r.repo} deposunun sürümlerinde (Releases) APK yok.`);
-    return D.rootApks(rel)[0].url;
-  }
   async function pinApp(a, quiet) {
-    const kaynak = await resolveKaynak(a.kaynak || a.apkUrl);
+    const kaynak = a.kaynak || a.apkUrl;
+    if (!/^https:\/\//.test(kaynak || "")) throw new Error("APK kaynağı yok.");
     a.kaynak = kaynak;
     await D.pin.request("y", a.id, kaynak);
     if (!quiet) loading(true, "Sürüm hazırlanıyor… (genelde 1-3 dk)");
@@ -243,7 +232,7 @@
     const l = db.apps.filter((a) => a.kind !== "web" && a.apkUrl && !D.isPinned(a.apkUrl));
     if (!l.length) return;
     toast(l.length + " uygulamanın sürümü sabitleniyor…", "info", 3500);
-    for (const a of l) { try { a.kaynak = await resolveKaynak(a.kaynak || a.apkUrl); } catch { a.kaynak = a.kaynak || a.apkUrl; } await D.pin.request("y", a.id, a.kaynak).catch(() => {}); }
+    for (const a of l) { a.kaynak = a.kaynak || a.apkUrl; await D.pin.request("y", a.id, a.kaynak).catch(() => {}); }
     const ok = [];
     await Promise.all(l.map(async (a) => { try { applyPin(a, await D.pin.wait("y", a.id)); ok.push(a.name); } catch {} }));
     if (ok.length) { save("Sürümler sabitlendi: " + ok.join(", ")); render(); }
@@ -729,9 +718,9 @@
     $("#tryNew").onclick = () => { const u = F.apkUrl.value.trim(); if (!/^https:\/\//.test(u)) return alertErr("Kaynak yok", "Önce APK kaynağını yaz."); if (Y) { Y.kur(a.id || "__dene", u); toast("Yeni sürüm bu telefona kuruluyor (yalnızca sen)", "info"); } else window.open(u, "_blank", "noopener"); };
     $("#pinNow").onclick = async () => {
       if (!existing) return alertErr("Önce kaydet", "Yeni uygulamada sürüm kaydedince hazırlanır.");
-      const u = F.apkUrl.value.trim(); if (!u) return alertErr("Kaynak yok", "Önce APK kaynağını yaz.");
+      const u = F.apkUrl.value.trim(); if (!/^https:\/\//.test(u)) return alertErr("Kaynak yok", "Önce APK kaynağını yaz.");
       a.kaynak = u;
-      try { await pinApp(a); F.apkUrl.value = a.kaynak; } catch (e) { return alertErr("Güncellenemedi", e.message); }
+      try { await pinApp(a); } catch (e) { return alertErr("Güncellenemedi", e.message); }
       F.version.value = a.version; F.size.value = a.size; F.paket.value = a.paket; F.updated.value = a.updated; if (a.minAndroid) F.minAndroid.value = a.minAndroid;
       $("#pinInfo").textContent = "v" + a.version + " · " + fmtDate(a.apkMs) + " · " + (a.size || "") + " · kaydedip yayınlayınca kullanıcılara gider";
       toast("Sürüm hazır · kaydet ve yayınla", "ok", 3500);
