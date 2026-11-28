@@ -35,7 +35,9 @@
   const isWeb = (a) => a.kind === "web";
   const isOwner = () => !!(state.invite && state.invite.owner);
   /* Paket adları: katalogdaki (virgülle birden fazla olabilir) ya da depodan bulunan adaylar */
-  const pkgs = (a) => { const p = D.pkgsOf(a); return p.length ? p : state.cands[a.id] || []; };
+  /* Telefonda aranacak paketler: katalogdaki + (test APK'sı için) ".test" sonekli hâli + depodan bulunan adaylar */
+  const pkgs = (a) => { const p = D.pkgsOf(a), test = /test|deneme/i.test(String(a.apkUrl || "").split("/").slice(-2).join("/"));
+    return [...new Set(p.concat(test ? p.filter((x) => !/\.test$/.test(x)).map((x) => x + ".test") : [], state.cands[a.id] || []))]; };
   /* Telefonda kurulu mu? Adaylardan kurulu olanı döndürür. Köprü yoksa (tarayıcı) null. */
   function pkgInfo(a) {
     if (!Y || isWeb(a)) return null;

@@ -72,6 +72,11 @@
     // Paket adı boş olan APK uygulamalarına otomatik paket adı (diğer uygulamaların güncelleme ekranı ve mağazadaki Aç/Kaldır bununla çalışır)
     Promise.all(db.apps.filter((a) => !a.paket && a.kind !== "web").map(async (a) => { const pk = await D.guessPackage(a); if (pk) { a.paket = pk; return a.name; } }))
       .then((l) => { l = l.filter(Boolean); if (l.length) { save("Paket adı bulundu: " + l.join(", ")); render(); } });
+    // Paket adı APK'yla uyuşmuyorsa düzelt (ör. test APK'sına kök paket yazılmış): yayınlayınca mağaza ve zorunlu güncelleme doğru paketi bulur
+    Promise.all(db.apps.filter((a) => a.paket && a.kind !== "web" && D.parseRelease(a.apkUrl)).map(async (a) => {
+      const p = D.parseRelease(a.apkUrl), pk = await D.packagesOf(p.owner, p.repo), best = D.pickPackage(pk, a.apkUrl);
+      if (best && pk.length > 1 && !D.pkgsOf(a).includes(best)) { a.paket = best; return a.name + " → " + best; }
+    })).then((l) => { l = l.filter(Boolean); if (l.length) { save("Paket adı düzeltildi: " + l.join(", ")); render(); } });
     loadLive();
     db.apps.forEach(async (a) => { const s = a.kind === "apk" && (await D.releaseStats(a.apkUrl)); if (s) { stats[a.id] = s; if (route() === "panel") { panelKpis(); if (a.adminOnly) ownRefresh(); } } });
     setTimeout(ownUpdateNotice, 3500);
@@ -653,7 +658,8 @@
       F.apkUrl.value = apk.url; F.size.value = fmtSize(apk.size); F.version.value = D.versionFrom(rel); F.updated.value = (apk.updated || rel.date || "").slice(0, 10);
       a.apkMs = Date.parse(apk.updated) || a.apkMs;
       const pk = await D.packagesOf(info.owner, info.repo);
-      if (pk.length === 1) F.paket.value = pk[0];
+      const best = D.pickPackage(pk, apk.url);
+      if (best) F.paket.value = best;
       else if (pk.length > 1 && !F.paket.value) toast("Bu depoda birden fazla uygulama var; paket adını elle yaz (" + pk.join(", ") + ")", "warn", 6000);
       const notes = D.notesFrom(rel.body); if (notes.length) F.whatsNew.value = notes.join("\n");
       // eski sürümler (aynı adlı APK'yı içeren önceki sürümler) → geçmiş

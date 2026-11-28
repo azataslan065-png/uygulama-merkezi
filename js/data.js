@@ -248,7 +248,19 @@
   // Depodaki android/app/build.gradle'dan paket adı(ları) (applicationId)
   async function packagesOf(owner, repo) {
     try { const r = await fetch(`https://raw.githubusercontent.com/${owner}/${repo}/HEAD/android/app/build.gradle`, { cache: "no-store" }); if (!r.ok) return [];
-      return [...new Set([...(await r.text()).matchAll(/applicationId\s*[=(]?\s*['"]([\w.]+)['"]/g)].map((m) => m[1]))]; } catch { return []; }
+      /* (2026-11-28) KÖK SEBEP ("cihazda yüklü ama Yükle görünüyor"): test çeşitleri (flavor) "applicationIdSuffix '.test'" ile ayrı paket
+         olur (Skorbord Test = com.azat.skorbord.test). Yalnızca applicationId okunduğu için test APK'sına kök paketi yazılıyor, mağaza
+         telefonda o paketi bulamayıp "Yükle" gösteriyordu. Şimdi her kimliğin sonek eklenmiş hâli de aday sayılır. */
+      const t = await r.text(), ids = [...t.matchAll(/applicationId\s*[=(]?\s*['"]([\w.]+)['"]/g)].map((m) => m[1]);
+      const ek = [...t.matchAll(/applicationIdSuffix\s*[=(]?\s*['"]([\w.]+)['"]/g)].map((m) => m[1]);
+      return [...new Set(ids.concat(...ids.map((i) => ek.map((e) => i + e))))]; } catch { return []; }
+  }
+  /* APK dosya adına göre doğru paket: "...Test.apk" / "apk-test" → test soneki taşıyan kimlik; değilse soneksiz kimlik */
+  function pickPackage(cands, apkUrl) {
+    if (cands.length <= 1) return cands[0] || "";
+    const test = /test|deneme/i.test(String(apkUrl || "").split("/").slice(-2).join("/"));
+    const ts = cands.filter((c) => /\.(test|deneme|beta)$/i.test(c)), kok = cands.filter((c) => !/\.(test|deneme|beta)$/i.test(c));
+    const l = test ? ts : kok; return l.length === 1 ? l[0] : "";
   }
   /* Paket adı boşsa tahmin: futbol-ligi'nin bilinen APK'ları, yoksa deponun build.gradle'ındaki tek applicationId */
   const KNOWN_PKG = { "futbol-ligi/SAHA.apk": "com.azat.saha", "futbol-ligi/Puan-Tablosu.apk": "com.azat.puantablosu", "futbol-ligi/SAHA-Admin.apk": "com.azat.sahaadmin",
@@ -257,10 +269,10 @@
     if (a.paket || a.kind === "web") return a.paket || "";
     const p = parseRelease(a.apkUrl); if (!p) return "";
     const k = KNOWN_PKG[p.repo + "/" + p.file]; if (k) return k;
-    const cache = LS.get("um.pkgGuess", {}), key = p.owner + "/" + p.repo;
+    const cache = LS.get("um.pkgGuess2", {}), key = p.owner + "/" + p.repo + "/" + p.tag + "/" + p.file;
     if (cache[key] !== undefined) return cache[key];
-    const pk = await packagesOf(p.owner, p.repo), v = pk.length === 1 ? pk[0] : "";
-    if (pk.length) { cache[key] = v; LS.set("um.pkgGuess", cache); }
+    const pk = await packagesOf(p.owner, p.repo), v = pickPackage(pk, a.apkUrl);
+    if (pk.length) { cache[key] = v; LS.set("um.pkgGuess2", cache); }
     return v;
   }
   // sürüm adından okunabilir numara: "v1.2.0" → "1.2.0"; numarasız etiketlerde ("apk") tarih kullanılır
@@ -383,5 +395,5 @@
     setInboxSeen(t) { LS.set("um.inboxSeen", t); }
   };
 
-  window.UMData = { loadDevApps, dev, pkgsOf, loadOzel, guessPackage, uploadVideo, packagesOf, normalize, normApp, normBeta, linkOf, loadCatalog, loadBeta, draft, publish, changes, GitHub, releases, versionFrom, notesFrom, parseRepo, releaseStats, parseRelease, member, user, LS, arr };
+  window.UMData = { pickPackage, loadDevApps, dev, pkgsOf, loadOzel, guessPackage, uploadVideo, packagesOf, normalize, normApp, normBeta, linkOf, loadCatalog, loadBeta, draft, publish, changes, GitHub, releases, versionFrom, notesFrom, parseRepo, releaseStats, parseRelease, member, user, LS, arr };
 })();

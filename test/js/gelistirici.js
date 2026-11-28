@@ -119,7 +119,7 @@
         let apk = rel.apks[0];
         if (rel.apks.length > 1) { loading(false); apk = await new Promise((res) => { const m = UI.modal(`<h3>Hangi APK?</h3><p>Son sürümde birden fazla APK var.</p>${rel.apks.map((x, i) => `<button class="btn ghost block" data-k="${i}" style="margin-bottom:8px">${esc(x.name)} · ${fmtSize(x.size)}</button>`).join("")}`, { onClose: () => res(null) }); $$("[data-k]", m.el).forEach((x) => x.onclick = () => { res(rel.apks[+x.dataset.k]); m.close(); }); }); if (!apk) return; loading(true, "GitHub'dan alınıyor…"); }
         const pk = await D.packagesOf(info.owner, info.repo);
-        gh = { url: apk.url, size: fmtSize(apk.size), ms: Date.parse(apk.updated) || Date.now(), paket: pk.length === 1 ? pk[0] : a.paket || "" };
+        gh = { url: apk.url, size: fmtSize(apk.size), ms: Date.parse(apk.updated) || Date.now(), paket: D.pickPackage(pk, apk.url) || a.paket || "" };
         F.ghRepo.value = info.owner + "/" + info.repo;
         if (!F.version.value.trim() || F.version.value === a.version) F.version.value = D.versionFrom(rel);
         if (!F.whatsNew.value.trim()) { const n = D.notesFrom(rel.body); if (n.length) F.whatsNew.value = n.join("\n"); }
