@@ -209,7 +209,7 @@
     return D.rootApks(rel)[0].url;
   }
   async function pinApp(a, quiet) {
-    const kaynak = await resolveKaynak(a.kaynak || a.apkUrl);
+    const kaynak = await resolveKaynak(a.kaynak || a.apkUrl || a.ghRepo);   // kaynak boşsa "GitHub'dan doldur" kutusundaki depo kullanılır
     a.kaynak = kaynak;
     await D.pin.request("y", a.id, kaynak);
     if (!quiet) loading(true, "Sürüm hazırlanıyor… (genelde 1-3 dk)");
@@ -803,12 +803,12 @@
       $$(".inp.err", f).forEach((x) => x.classList.remove("err"));
       const errs = [], web = F.kind.value === "web";
       const need = (el, msg) => { if (!el.value.trim()) { el.classList.add("err"); errs.push(msg); } };
-      need(F.name, "Uygulama adı"); need(F.short, "Kısa açıklama"); need(F.version, "Sürüm"); web ? need(F.webUrl, "Web adresi") : need(F.apkUrl, "APK bağlantısı");
+      need(F.name, "Uygulama adı"); need(F.short, "Kısa açıklama"); need(F.version, "Sürüm"); web ? need(F.webUrl, "Web adresi") : (F.ghRepo.value.trim() ? null : need(F.apkUrl, "APK kaynağı (ya da GitHub deposu)"));
       const nid = existing ? existing.id : slug(F.id.value || F.name.value);
       if (!nid) { F.id.classList.add("err"); errs.push("Kimlik"); }
       if (!existing && db.apps.some((x) => x.id === nid)) { F.id.classList.add("err"); return alertErr("Bu kimlik kullanılıyor", `"${nid}" kimlikli bir uygulama zaten var. Farklı bir kimlik yaz.`); }
       const urlEl = web ? F.webUrl : F.apkUrl;
-      if (urlEl.value.trim() && !/^https:\/\/\S+$/i.test(urlEl.value.trim())) { urlEl.classList.add("err"); return alertErr("Bağlantı geçersiz", "Bağlantı https:// ile başlayan tam bir adres olmalı."); }
+      if (web && urlEl.value.trim() && !/^https:\/\/\S+$/i.test(urlEl.value.trim())) { urlEl.classList.add("err"); return alertErr("Bağlantı geçersiz", "Bağlantı https:// ile başlayan tam bir adres olmalı."); }
       if (F.hasBeta.checked && (!F.b_version.value.trim() || !/^https:\/\/\S+$/i.test(F.b_url.value.trim()))) { (F.b_version.value.trim() ? F.b_url : F.b_version).classList.add("err"); return alertErr("Test sürümü eksik", "Test sürümü için sürüm numarası ve https:// ile başlayan site adresi gerekli. İstemiyorsan anahtarı kapat."); }
       if (F.hasBeta.checked && /\.apk(\?|#|$)/i.test(F.b_url.value.trim())) { F.b_url.classList.add("err"); return alertErr("Test sürümü site olmalı", "Test sürümü uygulama olarak kurulmaz; APK yerine test sitesinin adresini yaz."); }
       if (errs.length) { const first = $(".inp.err", f); first && first.scrollIntoView({ behavior: "smooth", block: "center" }); return alertErr("Eksik alanlar var", errs.join(", ") + " doldurulmalı."); }
