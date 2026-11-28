@@ -94,7 +94,7 @@
       await new Promise((r) => setTimeout(r, 60));
       const top = parts(p)[0], d = mget();
       const ok = this._owner() || top === "owner" ||
-        (["catalog", "inbox", "reviews", "media"].includes(top) && this._member()) ||
+        (["catalog", "inbox", "reviews", "media", "sayac"].includes(top) && this._member()) ||
         (top === "beta" && this._member(true, parts(p)[1])) ||
         (top === "gclaims" && parts(p)[1] === this.uid) ||
         (top === "gelistirici" && parts(p).length === 2 && dig(d, "gclaims/" + this.uid) === parts(p)[1]) ||
@@ -111,7 +111,7 @@
       else if (["gapps", "parca", "yukleme"].includes(top) && !this._owner()) { if (!this._dev(parts(p)[1])) throw this._deny(); }
       else if (top === "claims") { if (parts(p)[1] !== this.uid || (v && !(dig(d, "invites/" + v) || {}).active)) throw this._deny(); }
       else if (top === "owner") { if (d.owner || v !== this.uid) throw this._deny(); }
-      else if (!this._owner() && !(["members", "events", "reviews", "reports", "push"].includes(top) && this._member())) throw this._deny();
+      else if (!this._owner() && !(["members", "events", "reviews", "reports", "push", "sayac"].includes(top) && this._member())) throw this._deny();
       put(d, p, v); mput(d);
     },
     async update(p, v) { for (const k of Object.keys(v)) await this.set(p + "/" + k, v[k]); },

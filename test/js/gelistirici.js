@@ -14,10 +14,12 @@
   let me = null, list = [], poll = 0;
   $("#logoMark").innerHTML = I.logo;
   const ok = (u) => (u && !PH.test(u) ? u : "");
-  const pending = (a) => [a.icon, a.video, a.apkUrl, ...(a.screenshots || [])].some((u) => u && PH.test(u));
+  const preparing = (a) => a.kind !== "web" && a.kaynak && !ok(a.apkUrl);
+  const pending = (a) => preparing(a) || [a.icon, a.video, a.apkUrl, ...(a.screenshots || [])].some((u) => u && PH.test(u));
   function durum(a) {
     if (a.engel) return ["Yönetici yayından kaldırdı", "adm"];
     if (a.hata) return ["Hata: " + a.hata, "adm"];
+    if (preparing(a)) return ["Sürüm hazırlanıyor", "beta"];
     if (pending(a)) return ["Dosyalar GitHub'a aktarılıyor", "beta"];
     return ["Yayında", "upd"];
   }
@@ -64,6 +66,7 @@
           <label class="field"><span>Tür</span><select class="inp" name="kind"><option value="apk" ${a.kind !== "web" ? "selected" : ""}>Android (APK)</option><option value="web" ${a.kind === "web" ? "selected" : ""}>Web uygulaması</option></select></label></div>
         <label class="field"><span>Özellikler</span><textarea class="inp sm" name="features" placeholder="Her satıra bir özellik">${a.features || ""}</textarea></label>
       </section>
+      <div id="newVer" class="hidden" style="margin-bottom:12px"></div>
       <section class="form-sec"><h4><em>2</em>Uygulama dosyası</h4>
         <div class="field" data-for="apk"><span>GitHub deposu *</span><div style="display:flex;gap:8px"><input class="inp" name="ghRepo" value="${a.ghRepo || ""}" placeholder="kullanici/depo" autocapitalize="none" spellcheck="false" style="flex:1;min-width:0"><button type="button" class="btn primary" id="ghFill" style="flex:none"><span>Getir</span></button></div>
           <small id="apkS">${ok(a.apkUrl) ? "Şu anki: " + esc(decodeURIComponent(a.apkUrl.split("/").pop())) + " · sürüm " + esc(a.version || "—") : "Deponun son sürümündeki (Releases) APK kullanılır; yeni sürüm yayınlayınca mağaza güncellemeyi kendisi görür."}</small></div>
@@ -82,6 +85,13 @@
       <div class="form-bar"><button type="submit" class="btn primary">${raw(I.upload)}<span>${ex ? "Değişiklikleri yayınla" : "Yayınla"}</span></button></div>
       </form></div>`.s;
     const f = $("#f"), F = f.elements;
+    // GitHub'a yeni APK yüklendiyse kullanıcılara kendiliğinden gitmez; geliştirici kontrol edip "Güncelle"ye basar
+    if (ex && ex.kaynak && ok(ex.apkUrl)) D.pin.hasNew(ex).then((y) => {
+      if (!y) return; const nv = $("#newVer"); if (!nv) return;
+      nv.className = "beta-card"; nv.innerHTML = `<b>GitHub'da yeni sürüm var</b><small>Kullanıcılar şu an sürüm ${esc(ex.version || "")} kullanıyor. Yeni sürümü kendi telefonunda denedikten sonra “Güncelle”ye bas.</small>
+        <div class="rowbtns"><a class="btn outline" href="${esc(ex.kaynak)}" rel="noopener">${I.dl}<span>Yeni sürümü indir ve dene</span></a><button type="button" class="btn primary" id="pinGo"><span>Güncelle</span></button></div>`;
+      $("#pinGo").onclick = async () => { try { await D.pin.request(me.code, ex.id, ex.kaynak); toast("Güncelleniyor; 1-3 dk içinde kullanıcılara açılır", "ok", 4000); nv.classList.add("hidden"); } catch (e) { alertErr("Güncellenemedi", e.message); } };
+    });
     const kindSync = () => $$("[data-for]", f).forEach((el) => el.classList.toggle("hidden", el.dataset.for !== F.kind.value));
     F.kind.onchange = kindSync; kindSync();
     const thumbs = () => { $("#thumbs").innerHTML = shots.map((s, i) => `<div><img src="${esc(s.url || s.pv)}"><button type="button" data-rm="${i}" aria-label="Kaldır">✕</button></div>`).join(""); $$("[data-rm]").forEach((x) => x.onclick = () => { shots.splice(+x.dataset.rm, 1); thumbs(); }); };
@@ -147,8 +157,8 @@
       const v = {
         name: F.name.value.trim(), short: F.short.value.trim(), description: F.description.value.trim(), category: F.category.value.trim(), kind: F.kind.value,
         version: F.version.value.trim(), minAndroid: web ? "" : F.minAndroid.value.trim(), webUrl: web ? F.webUrl.value.trim() : "",
-        apkUrl: web ? "" : gh ? gh.url : ok(a.apkUrl), paket: web ? "" : gh ? gh.paket : a.paket || "", size: web ? "" : gh ? gh.size : a.size || "", apkMs: web ? 0 : gh ? gh.ms : a.apkMs || 0, ghRepo: web ? "" : F.ghRepo.value.trim(),
-        features: F.features.value.trim(), whatsNew: F.whatsNew.value.trim(), devName: me.name || "",
+        apkUrl: web ? "" : ok(a.apkUrl), kaynak: web ? "" : gh ? gh.url : a.kaynak || "", paket: web ? "" : a.paket || (gh && gh.paket) || "", size: web ? "" : a.size || (gh && gh.size) || "", apkMs: web ? 0 : a.apkMs || 0, ghRepo: web ? "" : F.ghRepo.value.trim(),
+        features: F.features.value.trim(), whatsNew: F.whatsNew.value.trim(), devName: a.devName || me.name || "",
         icon: nw.icon ? job("icon", nw.icon, "icon.png") : ok(a.icon),
         video: nw.video ? job("video", nw.video, nw.video.name) : dropVideo ? "" : ok(a.video),
         screenshots: shots.map((s, i) => (s.url ? s.url : job("shot" + i, s.blob, "shot" + i + ".jpg"))),
@@ -160,6 +170,8 @@
       try {
         loading(true, "Kaydediliyor…");
         await D.dev.save(me.code, nid, v);
+        // (2026-11-28) GitHub'daki APK kullanıcılara kendiliğinden gitmez: "Getir"le seçilen sürüm sunucuda kopyalanınca yayına girer
+        if (gh) await D.pin.request(me.code, nid, gh.url);
         loading(false);
         if (jobs.length) { pr.classList.remove("hidden"); $(".form-bar button", f).disabled = true; }
         for (const j of jobs) {

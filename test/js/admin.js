@@ -20,7 +20,7 @@
     } catch {}
   }
   const view = $("#view");
-  let db = null, published = null, stats = {}, live = { invites: {}, members: {}, claims: {}, events: {}, reviews: {}, reports: {}, queue: {}, devs: {}, gapps: {} };
+  let db = null, published = null, stats = {}, live = { sayac: {}, invites: {}, members: {}, claims: {}, events: {}, reviews: {}, reports: {}, queue: {}, devs: {}, gapps: {} };
 
   /* ================== GİRİŞ ================== */
   function authView(msg) {
@@ -80,10 +80,17 @@
     loadLive();
     db.apps.forEach(async (a) => { const s = a.kind === "apk" && (await D.releaseStats(a.apkUrl)); if (s) { stats[a.id] = s; if (route() === "panel") { panelKpis(); if (a.adminOnly) ownRefresh(); } } });
     setTimeout(ownUpdateNotice, 3500);
+    applyPendingPins().then(pinUnpinned);
   }
-  async function loadLive(keys = ["invites", "members", "claims", "events", "reviews", "reports", "queue", "devs", "gapps"]) {
+  async function loadLive(keys = ["invites", "members", "claims", "events", "reviews", "reports", "queue", "devs", "gapps", "sayac"]) {
     const path = { queue: "pushQueue", devs: "gelistirici" };
     await Promise.all(keys.map(async (k) => { try { live[k] = (await FB.get(path[k] || k)) || {}; } catch { live[k] = {}; } }));
+    // eski indirme kayıtlarından tekil sayaca bir kez aktarım (kişi = davet kodu)
+    if (keys.includes("sayac") && keys.includes("members")) {
+      const ek = {};
+      Object.values(live.members).forEach((m) => m && m.code && Object.entries(m.dl || {}).forEach(([app, d]) => { if (d && !d.beta && !(live.sayac[app] || {})[m.code]) ek[app + "/" + m.code] = true; }));
+      if (Object.keys(ek).length) { try { await FB.update("sayac", ek); Object.keys(ek).forEach((k) => { const [app, c] = k.split("/"); (live.sayac[app] = live.sayac[app] || {})[c] = true; }); } catch {} }
+    }
     const r = route(), h = location.hash; if (r === "panel") panel(true); else if (r === "kisiler") people(true); else if (r === "mesajlar") messages(true); else if (h.startsWith("#/uygulamalar")) apps();
     updateBadge();
   }
@@ -112,8 +119,9 @@
   /* ================== YARDIMCILAR ================== */
   function setTab(t) { $$("#tabs a").forEach((a) => a.classList.toggle("on", a.dataset.t === t)); $("#fab").classList.toggle("hidden", !(t === "uygulamalar" || t === "panel")); }
   const evList = () => Object.values(live.events.dl || {}).filter(Boolean);
-  const dlCount = (id) => evList().filter((e) => e.app === id).length;
-  const totalDownloads = () => db.apps.reduce((s, a) => s + (a.downloads || 0) + (stats[a.id] ? stats[a.id].downloads : 0), 0);
+  // (2026-11-28) tekil indirme: her kişi bir uygulama için bir kez sayılır (um/sayac/<uygulama>/<davet kodu>)
+  const dlCount = (id) => Object.keys(live.sayac[id] || {}).length;
+  const totalDownloads = () => db.apps.reduce((s, a) => s + dlCount(a.id), 0);
   function ratingOf(id) { const r = Object.values(live.reviews[id] || {}); if (!r.length) return null; return { avg: r.reduce((s, x) => s + (+x.stars || 0), 0) / r.length, n: r.length }; }
   const randCode = () => { const a = "abcdefghjkmnpqrstuvwxyz23456789"; return [...crypto.getRandomValues(new Uint8Array(10))].map((b) => a[b % a.length]).join(""); };
   const inviteUrl = (code) => (C.rootUrl || C.siteUrl) + "?d=" + code;
@@ -136,7 +144,7 @@
     if (ownBusy[a.id]) return { k: "busy", label: ownBusy[a.id] };
     const i = ownInfo(a); if (!i) return { k: "web", label: "İndir" };
     if (!i.kurulu) return { k: "yukle", label: "Yükle" };
-    const apk = (stats[a.id] && Date.parse(stats[a.id].updated)) || a.apkMs;
+    const apk = a.apkMs;   // onaylanmış (sabitlenmiş) sürüm
     return apk && i.zaman < apk - 120000 ? { k: "guncelle", label: "Güncelle" } : { k: "ac", label: "Aç" };
   }
   function ownHtml() {
@@ -173,6 +181,60 @@
     if (ups.length) toast(ups.length === 1 ? ups[0].name + " için güncelleme var" : ups.length + " yönetici uygulamasında güncelleme var", "warn", 4500);
   }
 
+  /* ================== SÜRÜM SABİTLEME (2026-11-28) ==================
+     GitHub'a yüklenen yeni APK kullanıcılara kendiliğinden gitmez. "Güncelle" o anki APK'nın kopyasını sunucuya aldırır
+     (um/sabitle/y/<uygulama>); kopya hazır olunca kataloğa yazılır, yayınlayınca kullanıcılar onu görür. */
+  const today = () => new Date().toISOString().slice(0, 10);
+  function applyPin(a, x) {
+    const prevV = a.version, prevUrl = a.apkUrl;
+    a.apkUrl = x.url; a.apkMs = x.ms; a.size = x.size || a.size; if (x.paket) a.paket = x.paket; if (x.minAndroid && !a.minAndroid) a.minAndroid = x.minAndroid;
+    if (x.surum && x.surum !== prevV) {
+      const pc = a.changelog.find((c) => c.version === prevV); if (pc && !pc.url && D.isPinned(prevUrl)) pc.url = prevUrl;
+      a.version = x.surum; if (!a.changelog.some((c) => c.version === x.surum)) a.changelog.unshift({ version: x.surum, date: today(), notes: [], url: "" });
+    }
+    a.updated = today();
+  }
+  async function pinApp(a, quiet) {
+    const kaynak = a.kaynak || a.apkUrl;
+    if (!/^https:\/\//.test(kaynak || "")) throw new Error("APK kaynağı yok.");
+    a.kaynak = kaynak;
+    await D.pin.request("y", a.id, kaynak);
+    if (!quiet) loading(true, "Sürüm hazırlanıyor… (genelde 1-3 dk)");
+    try { const x = await D.pin.wait("y", a.id, () => {}); applyPin(a, x); return x; } finally { if (!quiet) loading(false); }
+  }
+  // Panel kapalıyken biten sabitlemeler açılışta kataloğa işlenir
+  async function applyPendingPins() {
+    let all = {}; try { all = (await FB.get("sabitle/y")) || {}; } catch { return; }
+    const done = [];
+    db.apps.forEach((a) => { const x = all[a.id]; if (x && x.durum === "tamam" && x.ms > (a.apkMs || 0) && x.url !== a.apkUrl && (!a.kaynak || x.kaynak === a.kaynak)) { applyPin(a, x); done.push(a.name); } });
+    if (done.length) { save("Yeni sürüm hazır: " + done.join(", ")); render(); }
+  }
+  // Henüz sabitlenmemiş uygulamalar (her GitHub yüklemesi doğrudan kullanıcıya gidiyordu): bir kez sabitlenir
+  async function pinUnpinned() {
+    const l = db.apps.filter((a) => a.kind !== "web" && a.apkUrl && !D.isPinned(a.apkUrl));
+    if (!l.length) return;
+    toast(l.length + " uygulamanın sürümü sabitleniyor…", "info", 3500);
+    for (const a of l) { a.kaynak = a.kaynak || a.apkUrl; await D.pin.request("y", a.id, a.kaynak).catch(() => {}); }
+    const ok = [];
+    await Promise.all(l.map(async (a) => { try { applyPin(a, await D.pin.wait("y", a.id)); ok.push(a.name); } catch {} }));
+    if (ok.length) { save("Sürümler sabitlendi: " + ok.join(", ")); render(); }
+  }
+  async function updateFlow(a) {
+    try { await pinApp(a); } catch (e) { return alertErr("Güncellenemedi", e.message); }
+    save(`${a.name} v${a.version} hazır`); render();
+    if (await confirmDlg(`${a.name} v${a.version} kullanıcılara gönderilsin mi?`, "Yayınlayınca davetliler bu sürümü görür ve güncelleyebilir.", "Yayınla")) publishNow();
+  }
+  // Kaynakta yeni APK var mı: satırlara "Yeni sürüm · Dene · Güncelle" eklenir
+  function markNewVersions() {
+    $$("[data-yeni]").forEach(async (el) => {
+      const a = db.apps.find((x) => x.id === el.dataset.yeni); if (!a || a.kind === "web" || !a.kaynak) return;
+      if (!(await D.pin.hasNew(a))) return;
+      el.innerHTML = `<span class="badge upd">GITHUB'DA YENİ SÜRÜM</span> <button class="btn ghost sm" data-dene>Dene</button> <button class="btn ok sm" data-guncelle>Güncelle</button>`;
+      $("[data-dene]", el).onclick = () => { if (Y) { ownBusy[a.id] = "İniyor…"; Y.kur(a.id, a.kaynak); toast("Yeni sürüm bu telefona kuruluyor (yalnızca sen)", "info"); } else window.open(a.kaynak, "_blank", "noopener"); };
+      $("[data-guncelle]", el).onclick = () => updateFlow(a);
+    });
+  }
+
   /* ================== PANEL ================== */
   function panel(soft) {
     setTab("panel");
@@ -200,7 +262,7 @@
     const open = Object.values(live.reports).filter((r) => r && !r.done).length;
     k.innerHTML = html`
       <div class="kpi glass"><span>Uygulama</span><b>${db.apps.length}</b><small>${vis} görünür · ${db.apps.length - vis} gizli</small></div>
-      <div class="kpi glass"><span>İndirme</span><b>${fmtNum(evList().length)}</b><small>mağazadan · GitHub ${fmtNum(totalDownloads())}</small></div>
+      <div class="kpi glass"><span>İndirme</span><b>${fmtNum(totalDownloads())}</b><small>kişi başına bir kez sayılır</small></div>
       <div class="kpi glass"><span>Davetli</span><b>${inv}</b><small>${act} kişi son 7 günde girdi</small></div>
       <a class="kpi glass" href="#/mesajlar"><span>Açık hata</span><b style="${open ? "color:var(--warn)" : ""}">${open}</b><small>${Object.keys(live.reports).length} bildirim toplam</small></a>`.s;
   }
@@ -213,17 +275,18 @@
       const r = ratingOf(a.id);
       const behind = Object.values(live.members).filter((m) => m && m.dl && m.dl[a.id] && !m.dl[a.id].beta && m.dl[a.id].v !== a.version).length;
       return html`<div class="row-app glass" style="align-items:flex-start">${appIcon(a)}<div class="t"><b>${a.name}</b>
-        <small>${fmtNum(mine.length)} ${a.kind === "web" ? "açılış" : "indirme"} · ${users} kişi · son 30 gün ${last30}</small><br>
+        <small>${fmtNum(dlCount(a.id))} ${a.kind === "web" ? "kişi açtı" : "kişi indirdi"} · son 30 gün ${last30} kez</small><br>
         <small>${r ? raw(starsHtml(r.avg) + ` ${r.avg.toFixed(1).replace(".", ",")} (${r.n})`) : "puan yok"}${behind ? raw(` · <span style="color:var(--warn)">${behind} kişi eski sürümde</span>`) : ""}</small></div></div>`.s;
     }).join("");
   }
   const row = (a) => html`<div class="row-app glass ${a.hidden ? "hid" : ""}" data-id="${a.id}">
     ${appIcon(a)}<div class="t"><b>${a.name}${a.hidden ? raw('<span class="badge hid">GİZLİ</span>') : ""}${a.featured ? raw('<span class="badge new">ÖNE ÇIKAN</span>') : ""}${a.kind === "web" ? raw('<span class="badge web">WEB</span>') : ""}${a.beta ? raw('<span class="badge beta">TEST</span>') : ""}${a.adminOnly ? raw('<span class="badge adm">YÖNETİCİ</span>') : ""}${a.dev ? raw('<span class="badge web">GELİŞTİRİCİ</span>') : ""}</b>
-    <small>v${a.version} · ${a.category || "—"} · ${fmtDate(a.updated)} · ${fmtNum(dlCount(a.id))} indirme</small></div>
+    <small>v${a.version} · ${a.category || "—"} · ${fmtDate(a.updated)} · ${fmtNum(dlCount(a.id))} indirme</small><div class="yeni" data-yeni="${a.id}"></div></div>
     <div class="acts"><button class="icon-btn" data-vis title="${a.hidden ? "Göster" : "Gizle"}">${raw(a.hidden ? I.eyeOff : I.eye)}</button>
     <a class="icon-btn" href="#/duzenle/${encodeURIComponent(a.id)}" title="Düzenle">${raw(I.edit)}</a>
     <button class="icon-btn" data-del title="Sil" style="color:#ff8aa0">${raw(I.trash)}</button></div></div>`;
   function bindRows() {
+    markNewVersions();
     $$(".row-app[data-id]").forEach((r) => {
       const a = db.apps.find((x) => x.id === r.dataset.id); if (!a) return;
       $("[data-vis]", r).onclick = () => { a.hidden = !a.hidden; save(a.hidden ? `${a.name} gizlendi` : `${a.name} görünür`); render(); };
@@ -245,7 +308,7 @@
     const d = subState(x), icon = x.icon && !PH.test(x.icon) ? x.icon : "";
     return html`<div class="dev-card" data-sub="${x.code}/${x.id}"><div class="h">${appIcon({ name: x.name, icon })}<div><b>${x.name}</b><small>${x.devName} · sürüm ${x.version || "—"} · ${x.t ? ago(x.t) : ""}</small></div><span class="badge ${d[1]}">${d[0]}</span></div>
       ${x.hata ? html`<p class="help" style="margin:8px 0 0;color:var(--bad)">${x.hata}</p>` : ""}
-      <div class="rowbtns"><button class="btn ghost sm" data-sv>${raw(I.eye)}İncele</button><button class="btn ${x.engel ? "ok" : "danger"} sm" data-se>${x.engel ? "Yayına al" : "Yayından kaldır"}</button><button class="btn danger sm" data-sd>${raw(I.trash)}Sil</button></div></div>`;
+      <div class="rowbtns"><button class="btn ghost sm" data-sv>${raw(I.eye)}İncele</button><button class="btn ghost sm" data-sn>${raw(I.edit)}Geliştirici adı</button><span data-dyeni></span><button class="btn ${x.engel ? "ok" : "danger"} sm" data-se>${x.engel ? "Yayına al" : "Yayından kaldır"}</button><button class="btn danger sm" data-sd>${raw(I.trash)}Sil</button></div></div>`;
   }
   function bindSubs() {
     const all = submissions();
@@ -261,6 +324,13 @@
           <div class="row"><button class="btn ghost" data-c>Kapat</button></div>`);
         $("[data-c]", m.el).onclick = m.close;
       };
+      $("[data-sn]", el).onclick = () => {
+        const m = modal(`<h3>Geliştirici adı</h3><p>Mağazada uygulama adının altında görünür.</p><input class="inp" id="dn" maxlength="40" value="${esc(x.devName || "")}"><div class="row" style="margin-top:12px"><button class="btn ghost" data-c>Vazgeç</button><button class="btn primary" data-o>Kaydet</button></div>`);
+        $("[data-c]", m.el).onclick = m.close;
+        $("[data-o]", m.el).onclick = async () => { try { await FB.set(`gapps/${x.code}/${x.id}/devName`, $("#dn", m.el).value.trim() || null); m.close(); toast("Kaydedildi", "ok"); await loadLive(["gapps"]); } catch (e) { alertErr("Kaydedilemedi", e.message); } };
+      };
+      if (x.kaynak) D.pin.hasNew(x).then((y) => { if (!y) return; const sp = $("[data-dyeni]", el); sp.innerHTML = `<button class="btn ok sm">Güncelle (GitHub'da yeni sürüm)</button>`;
+        $("button", sp).onclick = async () => { try { await D.pin.request(x.code, x.id, x.kaynak); toast("Sürüm hazırlanıyor; 1-3 dk içinde kullanıcılara açılır", "ok", 4000); sp.innerHTML = ""; } catch (e) { alertErr("Güncellenemedi", e.message); } }; });
       $("[data-se]", el).onclick = async () => {
         try { await FB.set(`gapps/${x.code}/${x.id}/engel`, x.engel ? null : true); toast(x.engel ? "Yeniden yayında" : "Mağazadan kaldırıldı", "ok"); await loadLive(["gapps"]); } catch (e) { alertErr("Kaydedilemedi", e.message); }
       };
@@ -504,6 +574,7 @@
         <label class="field"><span>Açıklama</span><textarea class="inp" name="description" rows="5">${a.description}</textarea></label>
         <div class="cols"><label class="field"><span>Kategori</span><select class="inp" name="category">${catOpts.map((c) => html`<option ${c === a.category ? "selected" : ""}>${c}</option>`)}<option value="__new">+ Yeni kategori…</option></select></label>
           <label class="field"><span>Vurgu rengi</span><input class="inp" type="color" name="accent" value="${a.accent}" style="padding:6px;height:48px"></label></div>
+        <label class="field"><span>Geliştirici adı (mağazada uygulama adının altında)</span><input class="inp" name="devName" value="${a.devName}" maxlength="40" placeholder="${esc(db.store.owner || db.store.name)}"></label>
         <label class="switch"><span>Mağazada göster</span><input type="checkbox" name="visible" ${a.hidden ? "" : "checked"}><i></i></label>
         <label class="switch"><span>Öne çıkan (ana sayfada büyük kart)</span><input type="checkbox" name="featured" ${a.featured ? "checked" : ""}><i></i></label>
         <label class="switch"><span>Sadece yönetici (yalnızca ben görürüm; güncellemeleri yalnızca Yönetim uygulamasında çıkar)</span><input type="checkbox" name="adminOnly" ${a.adminOnly ? "checked" : ""}><i></i></label>
@@ -521,8 +592,9 @@
         <div class="cols"><label class="field"><span>Sürüm *</span><input class="inp" name="version" value="${a.version}" required maxlength="20" placeholder="1.0.0"></label>
           <label class="field"><span>Güncelleme tarihi</span><input class="inp" type="date" name="updated" value="${(a.updated || "").slice(0, 10)}"></label></div>
         <div data-for="apk">
-          <label class="field"><span>APK indirme bağlantısı *</span><input class="inp" name="apkUrl" value="${a.apkUrl}" inputmode="url" placeholder="https://github.com/…/releases/download/…/Uygulama.apk"><small>GitHub Releases bağlantısıysa boyut ve indirme sayısı otomatik alınır.</small></label>
-          <button type="button" class="btn ghost sm" id="fetchRel" style="margin:-4px 0 14px">${raw(I.cloud)}Boyutu GitHub'dan al</button>
+          <label class="field"><span>APK kaynağı (GitHub) *</span><input class="inp" name="apkUrl" value="${a.kaynak || (D.isPinned(a.apkUrl) ? "" : a.apkUrl)}" inputmode="url" placeholder="https://github.com/…/releases/download/…/Uygulama.apk"><small>GitHub'a yüklenen yeni APK kullanıcılara kendiliğinden gitmez. Kontrol edip “Güncelle”ye basınca o sürüm kullanıcılara açılır.</small></label>
+          <div class="cl-item" style="margin:-4px 0 10px"><div><b>Kullanıcılara giden sürüm</b><br><small style="color:var(--mut)" id="pinInfo">${D.isPinned(a.apkUrl) ? "v" + a.version + " · " + fmtDate(a.apkMs || a.updated) + " · " + (a.size || "") : "Henüz sabitlenmedi (kaydedince hazırlanır)"}</small></div></div>
+          <div class="rowbtns" style="margin:0 0 14px"><button type="button" class="btn ghost sm" id="tryNew">${raw(I.dl)}Yeni sürümü dene</button><button type="button" class="btn ok sm" id="pinNow">${raw(I.cloud)}Güncelle</button><button type="button" class="btn ghost sm" id="fetchRel">Boyutu GitHub'dan al</button></div>
           <label class="field"><span>Android paket adı</span><input class="inp" name="paket" value="${a.paket}" placeholder="com.azat.haykir" autocapitalize="none" spellcheck="false"><small>Mağaza uygulaması bununla telefonda kurulu olup olmadığını ve güncel olup olmadığını anlar; diğer uygulamaların “Güncelleme var” ekranı da bununla buraya yönlendirir. “GitHub'dan doldur” çoğu zaman kendisi bulur.</small></label>
           <div class="cols c3"><label class="field"><span>Boyut</span><input class="inp" name="size" value="${a.size}" placeholder="12 MB"></label>
             <label class="field"><span>Min. Android</span><input class="inp" name="minAndroid" value="${a.minAndroid}" placeholder="7.0"></label>
@@ -625,12 +697,22 @@
       $("[data-c]", m.el).onclick = m.close;
       $("[data-o]", m.el).onclick = () => { const v = $("#cv").value.trim(); if (!v) return toast("Sürüm gerekli", "err"); a.changelog.unshift({ version: v, date: $("#cd").value, notes: $("#cn").value.split("\n").map((s) => s.trim()).filter(Boolean), url: $("#cu").value.trim() }); a.changelog.sort((x, y) => (y.date || "").localeCompare(x.date || "")); drawCl(); m.close(); };
     };
+    $("#tryNew").onclick = () => { const u = F.apkUrl.value.trim(); if (!/^https:\/\//.test(u)) return alertErr("Kaynak yok", "Önce APK kaynağını yaz."); if (Y) { Y.kur(a.id || "__dene", u); toast("Yeni sürüm bu telefona kuruluyor (yalnızca sen)", "info"); } else window.open(u, "_blank", "noopener"); };
+    $("#pinNow").onclick = async () => {
+      if (!existing) return alertErr("Önce kaydet", "Yeni uygulamada sürüm kaydedince hazırlanır.");
+      const u = F.apkUrl.value.trim(); if (!/^https:\/\//.test(u)) return alertErr("Kaynak yok", "Önce APK kaynağını yaz.");
+      a.kaynak = u;
+      try { await pinApp(a); } catch (e) { return alertErr("Güncellenemedi", e.message); }
+      F.version.value = a.version; F.size.value = a.size; F.paket.value = a.paket; F.updated.value = a.updated; if (a.minAndroid) F.minAndroid.value = a.minAndroid;
+      $("#pinInfo").textContent = "v" + a.version + " · " + fmtDate(a.apkMs) + " · " + (a.size || "") + " · kaydedip yayınlayınca kullanıcılara gider";
+      toast("Sürüm hazır · kaydet ve yayınla", "ok", 3500);
+    };
     // boyut
     $("#fetchRel").onclick = async () => {
       const url = F.apkUrl.value.trim(); if (!D.parseRelease(url)) return alertErr("GitHub sürüm bağlantısı değil", "Bağlantı github.com/<kullanıcı>/<depo>/releases/download/<etiket>/<dosya>.apk biçiminde olmalı.");
       loading(true, "GitHub'a soruluyor…"); const s = await D.releaseStats(url, { fresh: true }); loading(false);
       if (!s) return alertErr("Bilgi alınamadı", "Sürüm ya da dosya bulunamadı. Bağlantıyı ve sürümün yayınlandığını kontrol et.");
-      F.size.value = fmtSize(s.size); if (s.updated) { F.updated.value = s.updated.slice(0, 10); a.apkMs = Date.parse(s.updated) || a.apkMs; }
+      F.size.value = fmtSize(s.size); if (s.updated) { F.updated.value = s.updated.slice(0, 10); }
       toast(`Boyut ${fmtSize(s.size)} · ${fmtNum(s.downloads)} indirme`, "ok");
     };
     // GitHub'dan doldur
@@ -656,7 +738,7 @@
       const apk = await pickApk(rel); if (!apk) return;
       F.kind.value = "apk"; kindSync();
       F.apkUrl.value = apk.url; F.size.value = fmtSize(apk.size); F.version.value = D.versionFrom(rel); F.updated.value = (apk.updated || rel.date || "").slice(0, 10);
-      a.apkMs = Date.parse(apk.updated) || a.apkMs;
+      // (2026-11-28) apkMs yalnızca sabitlenen sürümden gelir; kaynağın zamanı yazılmaz (yoksa kullanıcıya eski dosyayla "Güncelle" çıkardı)
       const pk = await D.packagesOf(info.owner, info.repo);
       const best = D.pickPackage(pk, apk.url);
       if (best) F.paket.value = best;
@@ -700,7 +782,7 @@
       Object.assign(a, {
         id: nid, paket: F.paket.value.trim(), name: F.name.value.trim(), short: F.short.value.trim(), description: F.description.value.trim(), kind: F.kind.value, ghRepo: F.ghRepo.value.trim(),
         category: F.category.value === "__new" ? "" : F.category.value, accent: F.accent.value, hidden: !F.visible.checked, featured: F.featured.checked,
-        version: F.version.value.trim(), updated: F.updated.value || new Date().toISOString().slice(0, 10), apkUrl: F.apkUrl.value.trim(), webUrl: F.webUrl.value.trim(),
+        version: F.version.value.trim(), updated: F.updated.value || new Date().toISOString().slice(0, 10), kaynak: F.kind.value === "web" ? "" : F.apkUrl.value.trim(), webUrl: F.webUrl.value.trim(), devName: F.devName.value.trim(),
         size: F.size.value.trim(), minAndroid: F.minAndroid.value.trim(), downloads: Math.max(0, +F.downloads.value || 0),
         features: split(F.features.value), whatsNew: split(F.whatsNew.value), knownIssues: split(F.knownIssues.value),
         requirements: { android: F.r_android.value.trim(), ram: F.r_ram.value.trim(), storage: F.r_storage.value.trim(), permissions: split(F.r_perm.value) },
@@ -716,6 +798,11 @@
       a.changelog.sort((x, y) => (y.date || "").localeCompare(x.date || ""));
       if (!existing) a.created = new Date().toISOString().slice(0, 10);
       if (a.featured) db.apps.forEach((x) => { if (x.id !== a.id) x.featured = false; });
+      // Henüz kullanıcıya giden sabit kopya yoksa şimdi hazırlanır (yeni uygulama ya da ilk kez sabitlenen)
+      if (a.kind !== "web" && !D.isPinned(a.apkUrl)) {
+        try { await pinApp(a); }
+        catch (e) { if (!(await confirmDlg("Sürüm hazırlanamadı", e.message + "\n\nYine de kaydedilsin mi? (Sunucu hazırlayınca panel kendisi işler.)", "Kaydet"))) return; if (!a.apkUrl) a.apkUrl = a.kaynak; }
+      }
       const clean = D.normApp(a);
       if (existing) db.apps[db.apps.findIndex((x) => x.id === existing.id)] = clean; else db.apps.unshift(clean);
       if (!save(existing ? `${a.name} güncellendi` : `${a.name} eklendi`)) return;

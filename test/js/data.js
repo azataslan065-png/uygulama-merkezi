@@ -32,6 +32,8 @@
       id: a.id, name: a.name || "", short: a.short || "", description: a.description || "",
       kind: a.kind === "web" ? "web" : "apk", webUrl: a.webUrl || "", ghRepo: a.ghRepo || "",
       paket: String(a.paket || "").trim(), apkMs: +a.apkMs || 0,
+      // kaynak: GitHub'daki güncel APK (geliştirici her yüklediğinde değişir). apkUrl: kullanıcıya giden, "Güncelle" ile onaylanmış sabit kopya
+      kaynak: a.kaynak || "",
       features: list(a.features), category: a.category || "", version: String(a.version || "1.0").trim().replace(/^v(?=\d)/i, ""),
       video: a.video || "", videoPoster: a.videoPoster || "",
       updated: a.updated || today(), created: a.created || a.updated || today(),
@@ -187,7 +189,7 @@
     onStep("APK bilgileri tazeleniyor…");
     await Promise.all(out.apps.filter((a) => a.kind !== "web" && parseRelease(a.apkUrl)).map(async (a) => {
       const s = await releaseStats(a.apkUrl, { fresh: true });
-      if (s && s.updated) { a.apkMs = Date.parse(s.updated) || a.apkMs; if (!a.size && s.size) a.size = (s.size / 1048576).toFixed(1).replace(".", ",") + " MB"; }
+      if (s && s.updated) { if (isPinned(a.apkUrl) || !a.apkMs) a.apkMs = Date.parse(s.updated) || a.apkMs; if (!a.size && s.size) a.size = (s.size / 1048576).toFixed(1).replace(".", ",") + " MB"; }
     }));
     out.store.updatedAt = new Date().toISOString();
     const beta = {};
@@ -322,7 +324,10 @@
       const t = Date.now();
       await Promise.all([
         FB.push("events/dl", { uid: FB.uid, app: app.id, v: version, t, beta: !!beta }),
-        FB.update("members/" + FB.uid + "/dl/" + app.id, { v: version, t, beta: !!beta })
+        FB.update("members/" + FB.uid + "/dl/" + app.id, { v: version, t, beta: !!beta }),
+        // (2026-11-28) indirme sayısı: her kişi (davet kodu) bir uygulama için yalnızca bir kez sayılır; tekrar indirmek ya da
+        // başka cihazdan indirmek sayıyı artırmaz
+        beta ? null : FB.set(`sayac/${app.id}/${this.code()}`, true)
       ]).catch(() => {});
     }
   };
@@ -363,6 +368,26 @@
     }
   };
   const PH = /^yukleniyor:/;
+  /* ---------- sürüm sabitleme (2026-11-28) ----------
+     GitHub'a yüklenen yeni APK kullanıcıya kendiliğinden gitmez. Yönetici ya da geliştirici "Güncelle"ye basınca sunucu
+     o anki APK'nın kopyasını alır (bkz. futbol-ligi/.github/scripts/um-gelistirici.js) ve kullanıcılar o kopyayı indirir. */
+  const isPinned = (u) => /\/releases\/download\/um-gelistirici\/s-[^/]+\.apk$/i.test(String(u || ""));
+  const pin = {
+    async request(kod, app, kaynak) { await FB.set(`sabitle/${kod}/${app}`, { kaynak, t: Date.now(), durum: "bekliyor" }); },
+    async wait(kod, app, onTick = () => {}, maxMs = 12 * 60e3) {
+      const son = Date.now() + maxMs;
+      while (Date.now() < son) {
+        const x = await FB.get(`sabitle/${kod}/${app}`).catch(() => null);
+        if (x && x.durum === "tamam") return x;
+        if (x && x.durum === "hata") throw new Error(x.mesaj || "Sabitlenemedi.");
+        onTick(x && x.durum);
+        await new Promise((r) => setTimeout(r, 5000));
+      }
+      throw new Error("Sunucu henüz yanıt vermedi. Birkaç dakika sonra tekrar dene (GitHub görevleri bazen gecikir).");
+    },
+    // kaynakta yeni bir APK var mı? (GitHub'daki dosyanın yüklenme zamanı yayındaki kopyadan yeni mi)
+    async hasNew(a) { if (!a.kaynak) return false; const s = await releaseStats(a.kaynak, { fresh: true }); return !!(s && s.updated && Date.parse(s.updated) > (a.apkMs || 0) + 120000); }
+  };
   /* Mağaza için geliştirici uygulamaları: yönetici yayından kaldırmadıysa ve dosyaları hazırsa görünür */
   async function loadDevApps() {
     let v; try { v = (await FB.get("gapps")) || {}; } catch { return []; }
@@ -395,5 +420,5 @@
     setInboxSeen(t) { LS.set("um.inboxSeen", t); }
   };
 
-  window.UMData = { pickPackage, loadDevApps, dev, pkgsOf, loadOzel, guessPackage, uploadVideo, packagesOf, normalize, normApp, normBeta, linkOf, loadCatalog, loadBeta, draft, publish, changes, GitHub, releases, versionFrom, notesFrom, parseRepo, releaseStats, parseRelease, member, user, LS, arr };
+  window.UMData = { pin, isPinned, pickPackage, loadDevApps, dev, pkgsOf, loadOzel, guessPackage, uploadVideo, packagesOf, normalize, normApp, normBeta, linkOf, loadCatalog, loadBeta, draft, publish, changes, GitHub, releases, versionFrom, notesFrom, parseRepo, releaseStats, parseRelease, member, user, LS, arr };
 })();

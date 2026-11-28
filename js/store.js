@@ -8,7 +8,7 @@
   const { $, $$, html, raw, I, toast, alertErr, modal, shareSheet, fmtNum, fmtDate, fmtSize, ago, appIcon, starsHtml, readImage } = UI;
   const D = UMData, C = UM_CONFIG;
   const view = $("#view");
-  const state = { db: null, ozel: [], dev: [], offline: false, q: "", cat: "Tümü", stats: {}, invite: null, beta: {}, reviews: {}, inbox: [], busy: {}, pendingV: {}, cands: {} };
+  const state = { sayac: {}, db: null, ozel: [], dev: [], offline: false, q: "", cat: "Tümü", stats: {}, invite: null, beta: {}, reviews: {}, inbox: [], busy: {}, pendingV: {}, cands: {} };
   // Uygulama Merkezi Android uygulamasının içinde mi açıldı? (köprü: android/…/Ana.java "UMYerel")
   const Y = window.UMYerel || null;
   const STORE_APK = "https://github.com/" + C.repo.owner + "/" + C.repo.name + "/releases/download/apk/Uygulama-Merkezi.apk";
@@ -50,7 +50,8 @@
     const i = pkgInfo(a); if (!i) return null;
     if (!i.kurulu) return "yukle";
     const rec = D.user.installed()[a.id];
-    const apk = (state.stats[a.id] && Date.parse(state.stats[a.id].updated)) || a.apkMs;
+    // (2026-11-28) GitHub'daki canlı dosyaya değil, yalnızca onaylanmış (sabitlenmiş) sürüme bakılır
+    const apk = a.apkMs;
     if (apk && i.zaman < apk - 120000) return "guncelle";
     if (!apk && rec && rec !== a.version) return "guncelle";
     return "ac";
@@ -83,7 +84,8 @@
     try { Y.kaldir(i.paket); } catch { alertErr("Kaldırılamadı", "Mağaza uygulamasını güncelleyip tekrar dene."); }
   }
   const appUrl = (a) => C.siteUrl + "#/app/" + encodeURIComponent(a.id);
-  function downloadsOf(a) { const s = state.stats[a.id]; return (a.downloads || 0) + (s ? s.downloads : 0); }
+  // Tekil indirme: uygulamayı en az bir kez indiren kişi sayısı (+ yöneticinin elle eklediği). GitHub'ın sayacı her indirmeyi saydığı için kullanılmaz.
+  function downloadsOf(a) { return (a.downloads || 0) + Object.keys(state.sayac[a.id] || {}).length; }
   const sizeOf = (a) => (isWeb(a) ? "Web" : (state.stats[a.id] && fmtSize(state.stats[a.id].size)) || a.size || "—");
   function rating(id) { const r = Object.values(state.reviews[id] || {}); if (!r.length) return null; return { avg: r.reduce((s, x) => s + (+x.stars || 0), 0) / r.length, n: r.length }; }
   const devName = (a) => a.devName || state.db.store.owner || state.db.store.name;
@@ -492,6 +494,7 @@
         if (!c.length) { const p = D.parseRelease(a.apkUrl); if (p) c = await D.packagesOf(p.owner, p.repo); }
         if (c.length) { state.cands[a.id] = c; refreshButtons(a.id); }
       });
+      FB.get("sayac").then((v) => { state.sayac = v || {}; visibleApps().forEach((a) => $$(`[data-dl="${a.id}"]`).forEach((el) => (el.textContent = fmtNum(downloadsOf(a))))); }).catch(() => {});
       FB.get("reviews").then((v) => { state.reviews = v || {}; if (!/^#\/(app\/|bildirimler)/.test(location.hash)) render(); }).catch(() => {});
       if (r.offline) toast("Çevrimdışısın · son kaydedilen liste gösteriliyor", "warn", 3500);
     } catch (e) {
