@@ -154,6 +154,9 @@
   /* ---------- yayınla ---------- */
   // Yayındakiyle taslak arasındaki farktan kullanıcılara duyuru çıkarır (yeni uygulama, yeni sürüm, yeni test sürümü)
   function changes(prev, next) {
+    // (2026-11-28) Kullanıcı isteği: yayınlarken otomatik bildirim (yeni uygulama, yeni sürüm, test sürümü) hiç oluşturulmaz.
+    // Güncellemeler mağazada "Güncelle" düğmesiyle görünür; duyuru gerekirse yönetici Mesajlar → Duyuru'dan elle gönderir.
+    if (next) return [];
     const out = [], old = new Map((prev ? prev.apps : []).map((a) => [a.id, a]));
     // (2026-11-27) "Yeni uygulama eklendi" duyurusu kaldırıldı; yalnızca kullanıcıdaki uygulamanın yeni sürümü ve test sürümü duyurulur.
     // Sadece yönetici uygulamaları hiç duyurulmaz.

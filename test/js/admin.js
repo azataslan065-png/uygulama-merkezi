@@ -533,7 +533,7 @@
         <label class="field"><span>Kime</span><select class="inp" id="anH"><option value="hepsi">Tüm davetliler</option><option value="test">Sadece testçiler</option></select></label></div>
       <label class="switch"><span>Telefonlara da bildirim gönder</span><input type="checkbox" id="anP" checked><i></i></label>
       <button class="btn primary block" id="anSend">${raw(I.bell)}Gönder</button>
-      <p class="help" style="margin-bottom:0">Duyuru mağazadaki 🔔 kutusunda görünür. Telefon bildirimi yalnızca bildirimleri açmış kişilere gider; gönderim 5 dakika içinde yapılır. Yeni uygulama ve sürümler için ayrıca duyuru yazmana gerek yok, yayınlayınca otomatik gider (Ayarlar'dan kapatılabilir).</p></div>
+      <p class="help" style="margin-bottom:0">Duyuru mağazadaki 🔔 kutusunda görünür. Telefon bildirimi yalnızca bildirimleri açmış kişilere gider; gönderim 5 dakika içinde yapılır.</p></div>
       ${q.length ? html`<div class="sec-h" style="margin-top:6px"><h2 style="font-size:16px">Son telefon bildirimleri</h2></div>${q.map(([, x]) => html`<div class="cl-item"><div><b>${x.title}</b><br><small style="color:var(--mut)">${ago(x.t)} · ${x.hedef === "test" ? "testçiler" : "herkes"} · ${st(x)}</small></div></div>`)}` : ""}`.s;
     $("#anSend").onclick = async () => {
       const title = $("#anT").value.trim(), body = $("#anB").value.trim(), app = $("#anA").value, hedef = $("#anH").value;
@@ -818,10 +818,10 @@
     view.innerHTML = html`<div class="view"><div class="sec-h" style="margin-top:14px"><h2>Ayarlar</h2></div>
       <section class="form-sec glass"><h4><em>★</em>Mağaza bilgileri</h4>
         <label class="field"><span>Mağaza adı</span><input class="inp" id="sName" value="${st.name}" maxlength="40"></label>
-        <label class="field"><span>Sahibi</span><input class="inp" id="sOwner" value="${st.owner}" maxlength="30"></label>
+        <label class="field"><span>Geliştirici adı (uygulama adının altında; uygulamada ayrıca yazılmadıysa)</span><input class="inp" id="sOwner" value="${st.owner}" maxlength="30"></label>
         <label class="field"><span>Slogan</span><input class="inp" id="sTag" value="${st.tagline}" maxlength="100"></label>
         <label class="field"><span>Kategoriler</span><input class="inp" id="sCats" value="${db.categories.join(", ")}"><small>Virgülle ayır.</small></label>
-        <label class="switch"><span>Yeni uygulama ve sürümlerde telefonlara otomatik bildirim gönder</span><input type="checkbox" id="sAuto" ${st.autoNotify ? "checked" : ""}><i></i></label>
+        <input type="checkbox" id="sAuto" class="hidden" ${st.autoNotify ? "checked" : ""}>
         <button class="btn primary block" id="storeSave">Kaydet</button>
       </section>
 
@@ -869,6 +869,8 @@
       st.name = $("#sName").value.trim() || "Uygulama Merkezi"; st.owner = $("#sOwner").value.trim(); st.tagline = $("#sTag").value.trim(); st.autoNotify = $("#sAuto").checked;
       const cats = $("#sCats").value.split(",").map((s) => s.trim()).filter(Boolean); if (cats.length) db.categories = [...new Set(cats)];
       save("Mağaza bilgileri kaydedildi");
+      // (2026-11-28) "Sahibi" (mağazada uygulama adının altında görünen ad) ve mağaza adı yayını beklemeden hemen yansır
+      FB.update("catalog/store", { name: st.name, owner: st.owner, tagline: st.tagline }).then(() => { published.store = Object.assign({}, published.store, { name: st.name, owner: st.owner, tagline: st.tagline }); toast("Mağazaya yansıdı", "ok", 1800); }).catch((e) => alertErr("Mağazaya yazılamadı", e.message));
     };
     $("#cpSnip").onclick = () => copy(snippet, "Kod kopyalandı");
     $("#cpStoreApk").onclick = () => copy(APK_STORE);

@@ -383,12 +383,15 @@
 
   /* ---------- bildirimler ---------- */
   // (2026-11-27) "Yeni uygulama eklendi" duyuruları gösterilmez (eski kayıtlar dahil)
-  const shownInbox = () => state.inbox.filter((x) => !/^Yeni uygulama\b/i.test(x.title || "") && !(x.app && !byId(x.app)));
+  // (2026-11-28) otomatik sürüm/yeni uygulama bildirimleri (eskiler dahil) gösterilmez; yalnızca yöneticinin elle gönderdiği duyurular
+  const autoNote = (x) => /^Yeni uygulama\b/i.test(x.title || "") || (x.app && /\sv[\w.+-]+$|test sürümü v/i.test(x.title || ""));
+  const shownInbox = () => state.inbox.filter((x) => !autoNote(x) && !(x.app && !byId(x.app)));
   function unread() { const s = D.user.inboxSeen(); return shownInbox().filter((x) => (x.t || 0) > s).length; }
   function drawBell() { const n = unread(); [$("#bellDot"), $("#tabBellDot")].forEach((d) => { if (!d) return; d.textContent = n > 9 ? "9+" : n; d.classList.toggle("hidden", !n); }); }
   async function loadInbox() {
     try { const v = (await FB.get("inbox")) || {}; state.inbox = Object.values(v).filter(Boolean).sort((x, y) => (y.t || 0) - (x.t || 0)).slice(0, 60); } catch { state.inbox = []; }
     drawBell();
+    if (location.hash.startsWith("#/bildirimler")) inbox();
   }
   function inbox() {
     const seen = D.user.inboxSeen(), items = shownInbox();
