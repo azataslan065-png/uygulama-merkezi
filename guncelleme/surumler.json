@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-28T15:19:37.404Z",
+  "updatedAt": "2026-11-28T15:24:42.672Z",
   "apps": {
     "haykir": {
       "name": "Haykir",
@@ -30,7 +30,7 @@
     },
     "mikro-dunya": {
       "name": "Mikro Dunya",
-      "version": "1.0.4",
+      "version": "1.0.0",
       "updated": "2026-11-28",
       "paket": "com.azat.mikrodunya",
       "apkMs": 1795875725000,
