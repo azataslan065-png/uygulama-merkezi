@@ -1,16 +1,6 @@
 {
-  "updatedAt": "2026-11-28T08:28:03.876Z",
+  "updatedAt": "2026-11-28T08:29:49.994Z",
   "apps": {
-    "yonetim-paneli": {
-      "name": "Yönetim Paneli",
-      "version": "1.3.5",
-      "updated": "2026-11-28",
-      "paket": "com.azat.adminkok",
-      "apkMs": 1795854473000,
-      "url": "https://github.com/azataslan065-png/futbol-ligi/releases/download/um-gelistirici/s-y-yonetim-paneli-1795854472934.apk",
-      "store": "https://azataslan065-png.github.io/uygulama-merkezi/#/app/yonetim-paneli",
-      "yonetici": true
-    },
     "kumanda": {
       "name": "Kumanda",
       "version": "1.0.0",
@@ -37,6 +27,15 @@
       "apkMs": 1795850322000,
       "url": "https://github.com/azataslan065-png/futbol-ligi/releases/download/um-gelistirici/s-y-azataslan065-png-cizim-atolyesi-1795850321547.apk",
       "store": "https://azataslan065-png.github.io/uygulama-merkezi/#/app/azataslan065-png-cizim-atolyesi"
+    },
+    "yonetim-paneli": {
+      "name": "Yönetim Paneli",
+      "version": "1.3.5",
+      "updated": "2026-11-28",
+      "paket": "com.azat.adminkok",
+      "apkMs": 1795854473000,
+      "url": "https://github.com/azataslan065-png/futbol-ligi/releases/download/um-gelistirici/s-y-yonetim-paneli-1795854472934.apk",
+      "store": "https://azataslan065-png.github.io/uygulama-merkezi/#/app/yonetim-paneli"
     }
   }
 }
