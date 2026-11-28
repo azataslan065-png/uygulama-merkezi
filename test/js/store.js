@@ -21,7 +21,7 @@
 
   /* ---------- statik parçalar ---------- */
   $("#splash .logo").innerHTML = I.logo; $("#logoMark").innerHTML = I.logo;
-  $("#shareStore").innerHTML = I.share; $("#acct").innerHTML = I.user; $("#bell").innerHTML = I.bell + '<span class="dot hidden" id="bellDot"></span>';
+  $("#shareStore").innerHTML = I.share; $("#bell").innerHTML = I.bell + '<span class="dot hidden" id="bellDot"></span>';
   $("#topSearchIc").innerHTML = I.search;
   $('[data-tab="home"]').innerHTML = '<i>' + I.home + "</i><span>Uygulamalar</span>";
   $('[data-tab="fav"]').innerHTML = '<i>' + I.star + "</i><span>Favoriler</span>";
@@ -431,40 +431,6 @@
       catch (e) { UI.loading(false); alertErr("Kod hatalı", e.code === "badcode" ? "Davet kodunu kontrol et ya da mağaza sahibinden yeni bağlantı iste." : e.message); }
     };
     $("#codeBtn").onclick = go; $("#code").addEventListener("keydown", (e) => e.key === "Enter" && go());
-    const al = document.createElement("button"); al.className = "btn ghost block"; al.style.marginTop = "10px"; al.textContent = "Yönetici girişi"; al.onclick = accountSheet; $(".gate .box").append(al);
-  }
-
-  /* ---------- YÖNETİCİ GİRİŞİ (2026-11-28) ----------
-     Kullanıcı isteği: "admin paneli mağazada başkası görmeyecek … fakat adminin kendi uygulama merkezi ekranında da görünmüyor".
-     Yalnızca yöneticiye açık uygulamalar (ör. SAHA Admin) mağazada ancak yönetici hesabıyla giriş yapılınca görünür. Sağ üstteki
-     hesap düğmesinden SAHA yönetici hesabıyla (e-posta + şifre) bir kez giriş yapılır; telefon bunu hatırlar. Yönetici uygulamaları
-     listede "Yönetici" etiketiyle çıkar, diğer uygulamalar gibi Yükle / Güncelle / Aç ile kurulur. Başka hiç kimse göremez (kurallar). */
-  async function backToInvite() {
-    try { await FB.signOut(); await FB.anon(); const c = D.member.code(); if (c) await D.member.claim(c).catch(() => {}); } catch {}
-  }
-  function accountSheet() {
-    if (isOwner()) {
-      const m = modal(`<h3>Yönetici</h3><p>${UI.esc((FB.user && FB.user.email) || "Yönetici hesabı")} ile giriş yapıldı. Yalnızca yöneticiye açık uygulamalar da görünüyor.</p>
-        <div class="row"><button class="btn ghost" data-c>Kapat</button><button class="btn danger" data-o>Çıkış yap</button></div>`);
-      $("[data-c]", m.el).onclick = m.close;
-      $("[data-o]", m.el).onclick = async () => { m.close(); UI.loading(true, "Çıkış yapılıyor…"); await backToInvite(); UI.loading(false); state.ozel = []; start(); };
-      return;
-    }
-    const m = modal(`<h3>Yönetici girişi</h3><p>Yalnızca mağaza sahibi içindir.</p>
-      <label class="field"><span>E-posta</span><input class="inp" id="ae" type="email" autocomplete="username" inputmode="email"></label>
-      <label class="field"><span>Şifre</span><input class="inp" id="ap" type="password" autocomplete="current-password"></label>
-      <div class="row"><button class="btn ghost" data-c>Vazgeç</button><button class="btn primary" data-o>Giriş yap</button></div>`);
-    $("[data-c]", m.el).onclick = m.close;
-    $("[data-o]", m.el).onclick = async () => {
-      const em = $("#ae", m.el).value.trim(), pw = $("#ap", m.el).value;
-      if (!em || !pw) return toast("E-posta ve şifreyi yaz", "warn");
-      UI.loading(true, "Giriş yapılıyor…");
-      try {
-        await FB.signIn(em, pw);
-        if ((await FB.get("owner").catch(() => null)) !== FB.uid) { await backToInvite(); UI.loading(false); return alertErr("Yönetici değil", "Bu hesap mağazanın sahibi değil."); }
-        UI.loading(false); m.close(); toast("Yönetici olarak giriş yapıldı", "ok"); start();
-      } catch (e) { UI.loading(false); alertErr("Giriş yapılamadı", e.message); }
-    };
   }
 
   /* ---------- yönlendirme ---------- */
@@ -515,12 +481,13 @@
       const inv = owner ? { code: "sahip", name: "", active: true, beta: true, owner: true } : await D.member.invite();
       if (!inv || inv.active !== true) { if (inv) localStorage.removeItem("um.invite"); return gate(inv ? "Davetin iptal edilmiş. Mağaza sahibinden yeni bir davet iste." : ""); }
       state.invite = inv;
-      $("#acct").classList.toggle("on", owner);
       let r;
       try { r = await D.loadCatalog(); }
       catch (e) { if (e.code === "denied") { localStorage.removeItem("um.invite"); return gate("Davetin artık geçerli değil. Mağaza sahibinden yeni bir davet iste."); } throw e; }
       state.db = r.db; state.offline = r.offline;
-      if (owner) state.ozel = await D.loadOzel();
+      // Yalnızca yöneticiye açık uygulamalar: sahibin kendisi ve yönetici panelinde Ayarlar'a girilen TEK mağaza (davet) kodundaki kişi görür.
+      // Diğer herkes için sunucu kuralı okumayı reddeder; loadOzel boş liste döner.
+      state.ozel = await D.loadOzel();
       state.dev = (await D.loadDevApps()).filter((a) => !state.db.apps.some((x) => x.id === a.id));
       state.beta = await D.loadBeta(inv);
       $("#storeName").textContent = r.db.store.name; document.title = r.db.store.name;
@@ -552,7 +519,6 @@
       view.innerHTML = html`<div class="empty" style="margin-top:24px"><div class="em">${raw(I.cloud)}</div><h3>Mağaza yüklenemedi</h3><p>${e.message}</p><button class="btn primary" style="margin-top:16px" onclick="location.reload()"><span>Tekrar dene</span></button></div>`.s;
     } finally { setTimeout(() => $("#splash").classList.add("done"), 250); }
     $("#shareStore").onclick = () => { if (!state.db) return; shareSheet(state.db.store.name, C.siteUrl); };
-    $("#acct").onclick = accountSheet;
     $("#bell").onclick = () => (location.hash = "#/bildirimler");
   }
   boot();

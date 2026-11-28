@@ -388,5 +388,3 @@ select.inp{background-color:var(--surf)}
 .ar-t .ar-s{color:var(--mut);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .block p.short{margin:0 0 8px;color:var(--txt);font-size:15px;font-weight:500;line-height:1.45}
 
-/* yönetici girişi düğmesi */
-.store .acct.on{color:var(--pri)}
