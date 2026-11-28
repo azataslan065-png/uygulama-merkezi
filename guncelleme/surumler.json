@@ -1,6 +1,15 @@
 {
-  "updatedAt": "2026-11-28T07:21:08.662Z",
+  "updatedAt": "2026-11-28T07:28:51.565Z",
   "apps": {
+    "skorbord": {
+      "name": "Skorbord",
+      "version": "1.0.62",
+      "updated": "2026-11-28",
+      "paket": "com.azat.skorbord",
+      "apkMs": 1795850910000,
+      "url": "https://github.com/azataslan065-png/futbol-ligi/releases/download/um-gelistirici/s-y-skorbord-1795850909468.apk",
+      "store": "https://azataslan065-png.github.io/uygulama-merkezi/#/app/skorbord"
+    },
     "azataslan065-png-cizim-atolyesi": {
       "name": "Çizim Atölyesi",
       "version": "1.0.5",
