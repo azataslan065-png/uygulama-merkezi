@@ -198,7 +198,9 @@
      deponun son kök sürümündeki APK bulunur. Önceden bu durumda sunucu dosyayı indiremiyordu. */
   async function resolveKaynak(u) {
     u = String(u || "").trim();
-    if (D.parseRelease(u)) return u;
+    // APK bağlantısıysa ve GitHub'da gerçekten varsa olduğu gibi; yoksa (yanlış ad / silinmiş dosya) deponun güncel kök APK'sı bulunur
+    if (D.parseRelease(u) && (await D.releaseStats(u, { fresh: true }))) return u;
+    if (D.parseRelease(u)) { const p = D.parseRelease(u); u = p.owner + "/" + p.repo; }
     const r = D.parseRepo(u.replace(/^https?:\/\//i, "").replace(/^(www\.)?github\.com\//i, ""));
     if (!r) throw new Error("APK kaynağı anlaşılmadı. GitHub deposunu (kullanici/depo) ya da APK bağlantısını yaz.");
     const info = await D.releases(r.owner + "/" + r.repo);
@@ -755,8 +757,8 @@
       if (!F.short.value.trim() && info.description) F.short.value = info.description.slice(0, 140);
       const withApk = info.releases.filter((r) => r.apks.length);
       if (!withApk.length) {
-        if (info.pages || info.homepage) { F.kind.value = "web"; kindSync(); if (!F.webUrl.value) F.webUrl.value = info.homepage || info.pages; return toast("APK sürümü yok; web adresi dolduruldu", "info", 3500); }
-        return alertErr("APK bulunamadı", "Bu deponun yayınlanmış sürümlerinde .apk dosyası yok.");
+        // (2026-11-28, kullanıcı: "varsayılan seçenek web değil APK olsun") APK bulunamazsa tür kendiliğinden web'e çevrilmez
+        return alertErr("APK bulunamadı", "Bu deponun yayınlanmış sürümlerinde (Releases) .apk dosyası yok. Web uygulamasıysa Tür'ü elle “Web uygulaması” yap.");
       }
       const pickApk = (rel) => new Promise((res) => {
         if (rel.apks.length === 1) return res(rel.apks[0]);
