@@ -1,8 +1,8 @@
 {
-  "updatedAt": "2026-11-28T07:18:45.098Z",
+  "updatedAt": "2026-11-28T07:21:08.662Z",
   "apps": {
     "azataslan065-png-cizim-atolyesi": {
-      "name": "azataslan065-png/cizim-atolyesi",
+      "name": "Çizim Atölyesi",
       "version": "1.0.5",
       "updated": "2026-11-28",
       "paket": "com.azat.cizim",
