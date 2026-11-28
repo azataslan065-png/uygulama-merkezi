@@ -358,7 +358,7 @@
       $("[data-sn]", el).onclick = () => {
         const m = modal(`<h3>Geliştirici adı</h3><p>Mağazada uygulama adının altında görünür.</p><input class="inp" id="dn" maxlength="40" value="${esc(x.devName || "")}"><div class="row" style="margin-top:12px"><button class="btn ghost" data-c>Vazgeç</button><button class="btn primary" data-o>Kaydet</button></div>`);
         $("[data-c]", m.el).onclick = m.close;
-        $("[data-o]", m.el).onclick = async () => { try { await FB.set(`gapps/${x.code}/${x.id}/devName`, $("#dn", m.el).value.trim() || null); m.close(); toast("Kaydedildi", "ok"); await loadLive(["gapps"]); } catch (e) { alertErr("Kaydedilemedi", e.message); } };
+        $("[data-o]", m.el).onclick = async () => { if (nameClash($("#dn", m.el).value.trim(), "gel")) return; try { await FB.set(`gapps/${x.code}/${x.id}/devName`, $("#dn", m.el).value.trim() || null); m.close(); toast("Kaydedildi", "ok"); await loadLive(["gapps"]); } catch (e) { alertErr("Kaydedilemedi", e.message); } };
       };
       if (x.kaynak) D.pin.hasNew(x).then((y) => { if (!y) return; const sp = $("[data-dyeni]", el); sp.innerHTML = `<button class="btn ok sm">Güncelle (GitHub'da yeni sürüm)</button>`;
         $("button", sp).onclick = async () => { try { await D.pin.request(x.code, x.id, x.kaynak); toast("Sürüm hazırlanıyor; 1-3 dk içinde kullanıcılara açılır", "ok", 4000); sp.innerHTML = ""; } catch (e) { alertErr("Güncellenemedi", e.message); } }; });
@@ -424,7 +424,7 @@
     const m = modal(`<h3>Yeni geliştirici</h3><p>Ad mağazada uygulamasının altında “geliştirici” olarak görünür.</p><label class="field"><span>Ad</span><input class="inp" id="dname" maxlength="40" placeholder="Örn. Mehmet Yazılım"></label><div class="row" style="margin-top:12px"><button class="btn ghost" data-c>Vazgeç</button><button class="btn primary" data-o>Oluştur</button></div>`);
     $("#dname", m.el).focus(); $("[data-c]", m.el).onclick = m.close;
     $("[data-o]", m.el).onclick = async () => {
-      const name = $("#dname", m.el).value.trim(); if (!name) return toast("Bir ad yaz", "warn");
+      const name = $("#dname", m.el).value.trim(); if (!name) return toast("Bir ad yaz", "warn"); if (nameClash(name, "gel")) return;
       const code = randCode();
       try { await FB.set("gelistirici/" + code, { name, active: true, created: Date.now() }); m.close(); await loadLive(["devs"]); showLink(devUrl(code), name + " için geliştirici bağlantısı", "Bu bağlantıyla yalnızca kendi uygulamalarını yükleyip düzenleyebilir. Kod: " + code); }
       catch (e) { alertErr("Oluşturulamadı", e.message); }
@@ -448,12 +448,23 @@
       catch (e) { alertErr("Kaydedilemedi", e.message); }
     };
   }
+  /* (2026-11-28) Davetli (mağazaya giriş) adı ile geliştirici adları birbirinden farklı olmalı */
+  const nk = (v) => String(v || "").toLocaleLowerCase("tr").replace(/\s+/g, " ").trim();
+  const devNames = () => [db.store.owner, ...db.apps.map((a) => a.devName), ...Object.values(live.devs).map((d) => d && d.name), ...Object.values(live.gapps).flatMap((g) => Object.values(g || {}).map((a) => a && a.devName))].filter(Boolean);
+  const invNames = () => Object.values(live.invites).map((x) => x && x.name).filter(Boolean);
+  function nameClash(name, kind) {
+    const n = nk(name); if (!n) return false;
+    const list = kind === "davet" ? devNames() : invNames();
+    if (!list.some((v) => nk(v) === n)) return false;
+    alertErr("Bu ad kullanılamaz", kind === "davet" ? `“${name}” geliştirici adı olarak kullanılıyor. Mağazaya giriş (davetli) adı farklı olmalı.` : `“${name}” bir davetlinin giriş adı. Geliştirici adı farklı olmalı.`);
+    return true;
+  }
   function personCard(code, x) {
     const ms = membersOf(code), last = Math.max(0, ...ms.map((m) => m.last || 0));
     const dls = {}; ms.forEach((m) => Object.entries(m.dl || {}).forEach(([id, d]) => { if (!dls[id] || dls[id].t < d.t) dls[id] = d; }));
     const dev = [...new Set(ms.map((m) => shortUa(m.ua)).filter(Boolean))].join(", ");
     return html`<div class="form-sec glass" data-code="${code}" style="${x.active ? "" : "opacity:.6"}">
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><b style="font-size:16px">${x.name || "İsimsiz"}</b>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><b style="font-size:16px">${x.name || "İsimsiz"}</b>${devNames().some((v) => nk(v) === nk(x.name)) ? raw('<span class="badge hid">AD GELİŞTİRİCİYLE AYNI</span>') : ""}
         ${x.active ? raw('<span class="badge new">AKTİF</span>') : raw('<span class="badge hid">İPTAL</span>')}${x.beta ? raw('<span class="badge beta">TÜM TESTLER</span>') : Object.keys(x.test || {}).length ? raw(`<span class="badge beta">${Object.keys(x.test).length} TEST</span>`) : ""}</div>
       <p class="help" style="margin:6px 0 0">${ms.length ? `${ms.length} cihaz · son giriş ${ago(last) || "—"}${dev ? " · " + dev : ""}` : "Henüz bağlantıyı açmadı"}</p>
       ${Object.keys(dls).length ? html`<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px">${Object.entries(dls).map(([id, d]) => { const cur = appCur(id), oldv = !d.beta && cur && d.v !== cur; return html`<span class="chip" style="min-height:30px;font-size:12.5px;${oldv ? "color:var(--warn);border-color:rgba(255,192,72,.35)" : ""}">${appName(id)} v${d.v}${d.beta ? " (test)" : ""}${oldv ? " · eski" : ""}</span>`; })}</div>` : ""}
@@ -473,7 +484,7 @@
     };
     $("[data-ren]", el).onclick = () => {
       const m = modal(`<h3>Ad değiştir</h3><input class="inp" id="nn" maxlength="40" value="${esc(x.name || "")}"><div class="row" style="margin-top:12px"><button class="btn ghost" data-c>Vazgeç</button><button class="btn primary" data-o>Kaydet</button></div>`);
-      $("[data-c]", m.el).onclick = m.close; $("[data-o]", m.el).onclick = async () => { m.close(); await upd(`invites/${code}/name`, $("#nn", m.el).value.trim() || "İsimsiz", "Ad değiştirildi"); };
+      $("[data-c]", m.el).onclick = m.close; $("[data-o]", m.el).onclick = async () => { const v = $("#nn", m.el).value.trim() || "İsimsiz"; if (nameClash(v, "davet")) return; m.close(); await upd(`invites/${code}/name`, v, "Ad değiştirildi"); people(true); };
     };
     $("[data-rm]", el).onclick = async () => {
       if (!(await confirmDlg(`${x.name || "Davet"} silinsin mi?`, "Davet bağlantısı tamamen geçersiz olur ve kayıtlarından kaldırılır.", "Sil", true))) return;
@@ -492,7 +503,7 @@
     $("#iname", m.el).focus();
     $("[data-c]", m.el).onclick = m.close;
     $("[data-o]", m.el).onclick = async () => {
-      const name = $("#iname", m.el).value.trim(); if (!name) return toast("Bir ad yaz", "warn");
+      const name = $("#iname", m.el).value.trim(); if (!name) return toast("Bir ad yaz", "warn"); if (nameClash(name, "davet")) return;
       const code = randCode();
       try { await FB.set("invites/" + code, { name, active: true, created: Date.now() }); m.close(); await loadLive(["invites"]); showInvite(code, name); }
       catch (e) { alertErr("Oluşturulamadı", e.message); }
@@ -800,6 +811,7 @@
     $$("[data-mode]", f).forEach((x) => x.addEventListener("click", () => (submitMode = x.dataset.mode)));
     f.onsubmit = async (e) => {
       e.preventDefault();
+      if (nameClash(F.devName.value.trim(), "gel")) return;
       $$(".inp.err", f).forEach((x) => x.classList.remove("err"));
       const errs = [], web = F.kind.value === "web";
       const need = (el, msg) => { if (!el.value.trim()) { el.classList.add("err"); errs.push(msg); } };
@@ -917,6 +929,7 @@
       catch (e) { loading(false); alertErr("Kaydedilemedi", e.message); }
     };
     $("#storeSave").onclick = () => {
+      if (nameClash($("#sOwner").value.trim(), "gel")) return;
       st.name = $("#sName").value.trim() || "Uygulama Merkezi"; st.owner = $("#sOwner").value.trim(); st.tagline = $("#sTag").value.trim(); st.autoNotify = $("#sAuto").checked;
       const cats = $("#sCats").value.split(",").map((s) => s.trim()).filter(Boolean); if (cats.length) db.categories = [...new Set(cats)];
       save("Mağaza bilgileri kaydedildi");
