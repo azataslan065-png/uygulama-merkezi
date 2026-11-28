@@ -96,6 +96,7 @@
       const ok = this._owner() || top === "owner" ||
         (["catalog", "inbox", "reviews", "media", "sayac"].includes(top) && this._member()) ||
         (top === "beta" && this._member(true, parts(p)[1])) ||
+        (top === "ozel" && this._member() && !!dig(d, "ozelKod") && dig(d, "claims/" + this.uid) === dig(d, "ozelKod")) ||
         (top === "gclaims" && parts(p)[1] === this.uid) ||
         (top === "gelistirici" && parts(p).length === 2 && dig(d, "gclaims/" + this.uid) === parts(p)[1]) ||
         (top === "gapps" && parts(p)[1] && this._dev(parts(p)[1])) ||

@@ -48,7 +48,7 @@ h1,h2,h3,h4{font-family:var(--font-h);letter-spacing:0}
 .store .shell{max-width:980px;padding:calc(66px + var(--safe-t)) 16px calc(84px + var(--safe-b))}
 .store .topbar{position:fixed;left:0;right:0;top:0;margin:0;padding:calc(8px + var(--safe-t)) 12px 8px;background:var(--bg);backdrop-filter:none;-webkit-backdrop-filter:none;border-bottom:1px solid transparent;z-index:40}
 .store .topbar.scrolled{border-bottom-color:var(--line)}
-.tb-in{max-width:980px;margin:0 auto;display:flex;align-items:center;gap:8px}
+.tb-in{width:100%;max-width:980px;margin:0 auto;display:flex;align-items:center;gap:8px}
 .logo{background:var(--pri);box-shadow:none;border-radius:10px}
 .logo svg path,.logo svg{stroke:var(--pri-ink)}
 .brand{gap:8px;font-weight:500;font-size:18px;font-family:var(--font-h)}
@@ -387,3 +387,4 @@ select.inp{background-color:var(--surf)}
 /* (2026-11-28) kısa açıklama: listede adın altında, detayda "Bu uygulama hakkında"nın başında */
 .ar-t .ar-s{color:var(--mut);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .block p.short{margin:0 0 8px;color:var(--txt);font-size:15px;font-weight:500;line-height:1.45}
+

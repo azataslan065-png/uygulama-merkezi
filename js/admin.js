@@ -859,6 +859,11 @@
         <button class="btn primary block" id="storeSave">Kaydet</button>
       </section>
 
+      <section class="form-sec glass"><h4><em>⚿</em>Yönetici uygulamaları</h4>
+        <label class="field"><span>Mağaza kodu</span><input class="inp" id="ozKod" placeholder="Davet kodun" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="40"><small>Yalnızca yöneticiye açık uygulamalar mağazada sadece bu koddaki kişide görünür.</small></label>
+        <button class="btn primary block" id="ozSave">Kaydet</button>
+      </section>
+
       <section class="form-sec glass"><h4><em>⇪</em>GitHub (görseller ve sürüm dosyası)</h4>
         <p class="help" style="margin-top:0">Katalog artık Firebase'de; GitHub anahtarı yalnızca <b>yeni görselleri</b> ve uygulamaların okuduğu <b>sürüm dosyasını</b> yüklemek için gerekir. Daha önce girdiysen bir şey yapmana gerek yok.</p>
         <div class="help"><ol><li><a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener" style="text-decoration:underline">GitHub anahtar sayfasını</a> aç (Fine-grained token).</li>
@@ -898,6 +903,18 @@
       loading(true, "GitHub'a bağlanılıyor…");
       try { const r = await D.GitHub.check(); loading(false); dialog({ title: "Bağlantı başarılı", message: `${r.full_name} deposuna yazma izni var. Anahtar kaydedildi.`, type: "ok" }); }
       catch (e) { loading(false); D.GitHub.token = prev; alertErr("Bağlantı kurulamadı", e.message); }
+    };
+    FB.get("ozelKod").then((v) => { const i = $("#ozKod"); if (i && v && !i.value) i.value = v; }).catch(() => {});
+    $("#ozSave").onclick = async () => {
+      const c = $("#ozKod").value.trim();
+      if (c) {
+        const iv = await FB.get("invites/" + c).catch(() => null);
+        if (!iv) return alertErr("Kod bulunamadı", "Bu davet kodu yok. Kişiler sekmesindeki kendi davet kodunu yaz.");
+        if (iv.active !== true) return alertErr("Kod kapalı", "Bu davetin erişimi kapalı.");
+      }
+      loading(true, "Kaydediliyor…");
+      try { await FB.set("ozelKod", c || null); loading(false); toast(c ? "Kaydedildi" : "Kod kaldırıldı", "ok"); }
+      catch (e) { loading(false); alertErr("Kaydedilemedi", e.message); }
     };
     $("#storeSave").onclick = () => {
       st.name = $("#sName").value.trim() || "Uygulama Merkezi"; st.owner = $("#sOwner").value.trim(); st.tagline = $("#sTag").value.trim(); st.autoNotify = $("#sAuto").checked;

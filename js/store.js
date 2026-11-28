@@ -485,7 +485,9 @@
       try { r = await D.loadCatalog(); }
       catch (e) { if (e.code === "denied") { localStorage.removeItem("um.invite"); return gate("Davetin artık geçerli değil. Mağaza sahibinden yeni bir davet iste."); } throw e; }
       state.db = r.db; state.offline = r.offline;
-      if (owner) state.ozel = await D.loadOzel();
+      // Yalnızca yöneticiye açık uygulamalar: sahibin kendisi ve yönetici panelinde Ayarlar'a girilen TEK mağaza (davet) kodundaki kişi görür.
+      // Diğer herkes için sunucu kuralı okumayı reddeder; loadOzel boş liste döner.
+      state.ozel = await D.loadOzel();
       state.dev = (await D.loadDevApps()).filter((a) => !state.db.apps.some((x) => x.id === a.id));
       state.beta = await D.loadBeta(inv);
       $("#storeName").textContent = r.db.store.name; document.title = r.db.store.name;
