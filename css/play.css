@@ -383,3 +383,7 @@ select.inp{background-color:var(--surf)}
 .um-test .shell{margin-top:18px}
 .um-test .d-bar{top:18px}
 @media(min-width:900px){.um-test.admin .adm-tabs{top:calc(80px + var(--safe-t))}}
+
+/* (2026-11-28) kısa açıklama: listede adın altında, detayda "Bu uygulama hakkında"nın başında */
+.ar-t .ar-s{color:var(--mut);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.block p.short{margin:0 0 8px;color:var(--txt);font-size:15px;font-weight:500;line-height:1.45}
