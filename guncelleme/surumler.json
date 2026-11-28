@@ -1,13 +1,13 @@
 {
-  "updatedAt": "2026-11-28T07:05:45.992Z",
+  "updatedAt": "2026-11-28T07:18:45.098Z",
   "apps": {
     "azataslan065-png-cizim-atolyesi": {
       "name": "azataslan065-png/cizim-atolyesi",
-      "version": "1.0.0",
+      "version": "1.0.5",
       "updated": "2026-11-28",
-      "paket": "",
-      "apkMs": 0,
-      "url": "https://azataslan065-png.github.io/cizim-atolyesi/",
+      "paket": "com.azat.cizim",
+      "apkMs": 1795850322000,
+      "url": "https://github.com/azataslan065-png/futbol-ligi/releases/download/um-gelistirici/s-y-azataslan065-png-cizim-atolyesi-1795850321547.apk",
       "store": "https://azataslan065-png.github.io/uygulama-merkezi/#/app/azataslan065-png-cizim-atolyesi"
     }
   }
