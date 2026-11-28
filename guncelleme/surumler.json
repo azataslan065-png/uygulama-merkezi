@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-11-28T09:00:16.647Z",
+  "updatedAt": "2026-11-28T09:01:08.338Z",
   "apps": {
     "kumanda": {
       "name": "Kumanda",
@@ -12,7 +12,7 @@
     },
     "skorbord": {
       "name": "Skorbord",
-      "version": "1.0.0",
+      "version": "62",
       "updated": "2026-11-28",
       "paket": "com.azat.skorbord",
       "apkMs": 1795850910000,
