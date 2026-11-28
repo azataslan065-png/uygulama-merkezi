@@ -1,14 +1,4 @@
 {
-  "updatedAt": "2026-11-28T05:55:57.192Z",
-  "apps": {
-    "skorbord": {
-      "name": "Skorbord",
-      "version": "1.0.0",
-      "updated": "2026-11-28",
-      "paket": "",
-      "apkMs": 1795829294000,
-      "url": "https://github.com/azataslan065-png/futbol-ligi/releases/download/um-gelistirici/s-y-skorbord-1795829293566.apk",
-      "store": "https://azataslan065-png.github.io/uygulama-merkezi/#/app/skorbord"
-    }
-  }
+  "updatedAt": "2026-11-28T05:58:12.216Z",
+  "apps": {}
 }
