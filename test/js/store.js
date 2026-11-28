@@ -102,7 +102,7 @@
     const meta = [a.category || "Genel", r ? comma(r.avg) + " ★" : "", isWeb(a) ? "Web" : sizeOf(a)].filter(Boolean);
     return html`<div class="app-row" style="animation-delay:${Math.min(i, 10) * 35}ms" data-id="${a.id}">
       <a class="ar-main" href="#/app/${encodeURIComponent(a.id)}">${appIcon(a)}
-        <div class="ar-t"><b>${a.name}</b><small>${raw(meta.map((m) => UI.esc(m)).join(" · "))}</small>
+        <div class="ar-t"><b>${a.name}</b>${a.short ? html`<span class="ar-s">${a.short}</span>` : ""}<small>${raw(meta.map((m) => UI.esc(m)).join(" · "))}</small>
           ${a.adminOnly ? raw('<em class="tag adm">Yönetici</em>') : ""}${hasUpdate(a) ? raw('<em class="tag upd">Güncelleme</em>') : ""}${betaOf(a) ? raw('<em class="tag beta">Test sürümü mevcut</em>') : ""}</div></a>
       <div class="ar-cta" data-cta="row" data-id="${a.id}">${raw(ctaHtml(a, "row"))}</div>
     </div>`.s;
@@ -296,6 +296,7 @@
       ${b ? raw(betaNote(a, "big")) : ""}
       ${media.length ? html`<div class="gallery">${raw(media.map((m, i) => m.type === "video" ? playerHtml(m) : `<div class="shot"><img src="${UI.esc(m.src)}" alt="Ekran görüntüsü ${i}" loading="lazy" decoding="async"></div>`).join(""))}</div>` : ""}
       <section class="block"><a class="block-h" href="javascript:void 0" id="aboutH"><h2>Bu uygulama hakkında</h2>${raw(I.arrow)}</a>
+        ${a.short && a.description && a.short !== a.description ? html`<p class="short">${a.short}</p>` : ""}
         <p class="lead clamp" id="about">${a.description || a.short}</p>
         ${a.features.length ? html`<div class="feat">${a.features.map((f) => html`<span>${f}</span>`)}</div>` : ""}
         ${a.category ? html`<div class="feat cat"><span>${a.category}</span></div>` : ""}</section>
