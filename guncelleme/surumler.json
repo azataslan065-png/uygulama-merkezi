@@ -1,6 +1,15 @@
 {
-  "updatedAt": "2026-11-28T07:50:52.811Z",
+  "updatedAt": "2026-11-28T08:02:51.786Z",
   "apps": {
+    "kumanda": {
+      "name": "Kumanda",
+      "version": "1.0.3",
+      "updated": "2026-11-28",
+      "paket": "com.azat.kumanda",
+      "apkMs": 1795852944257,
+      "url": "https://github.com/azataslan065-png/futbol-ligi/releases/download/um-gelistirici/s-y-kumanda-1795852944257.apk",
+      "store": "https://azataslan065-png.github.io/uygulama-merkezi/#/app/kumanda"
+    },
     "skorbord": {
       "name": "Skorbord",
       "version": "1.0.0",
