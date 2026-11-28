@@ -1,6 +1,15 @@
 {
-  "updatedAt": "2026-11-28T14:32:13.504Z",
+  "updatedAt": "2026-11-28T14:36:44.356Z",
   "apps": {
+    "haykir": {
+      "name": "Haykir",
+      "version": "1.0.4",
+      "updated": "2026-11-28",
+      "paket": "com.azat.haykir",
+      "apkMs": 1795876580000,
+      "url": "https://github.com/azataslan065-png/futbol-ligi/releases/download/um-gelistirici/s-y-haykir-1795876580212.apk",
+      "store": "https://azataslan065-png.github.io/uygulama-merkezi/#/app/haykir"
+    },
     "uyanan-savasci": {
       "name": "Uyanan Savasci",
       "version": "1.0.4",
