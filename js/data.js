@@ -200,7 +200,8 @@
     const strip = (a) => { const c = Object.assign({}, a); delete c.beta; return c; };
     // Sadece yönetici uygulamaları herkese açık kataloğa hiç yazılmaz: yalnızca sahibin okuyabildiği "ozel" dalına gider
     const catalog = JSON.parse(JSON.stringify(Object.assign({}, out, { apps: out.apps.filter((a) => !a.adminOnly).map(strip) })));
-    const ozel = JSON.parse(JSON.stringify(out.apps.filter((a) => a.adminOnly).map(strip)));
+    // Yönetici uygulamalarının test sürümü de "ozel" dalında kalır (genel "beta" dalına yazılırsa kurallar onu gizler, hiç görünmez)
+    const ozel = JSON.parse(JSON.stringify(out.apps.filter((a) => a.adminOnly)));
     onStep("Katalog yazılıyor…");
     await FB.set("catalog", catalog);
     await FB.set("ozel", ozel.length ? ozel : null);

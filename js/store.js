@@ -490,6 +490,8 @@
       state.ozel = await D.loadOzel();
       state.dev = (await D.loadDevApps()).filter((a) => !state.db.apps.some((x) => x.id === a.id));
       state.beta = await D.loadBeta(inv);
+      // Yönetici uygulamalarının test sürümü kendi kaydında gelir; uygulamayı görebilen kişi testini de görür
+      state.ozel.forEach((a) => { if (a.beta && a.beta.webUrl && !state.beta[a.id]) state.beta[a.id] = a.beta; });
       $("#storeName").textContent = r.db.store.name; document.title = r.db.store.name;
       render();
       if (!owner) D.member.touch(inv);
