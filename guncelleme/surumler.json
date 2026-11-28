@@ -1,6 +1,15 @@
 {
-  "updatedAt": "2026-11-28T09:32:11.125Z",
+  "updatedAt": "2026-11-28T14:22:26.963Z",
   "apps": {
+    "mikro-dunya": {
+      "name": "Mikro Dunya",
+      "version": "1.0.4",
+      "updated": "2026-11-28",
+      "paket": "com.azat.mikrodunya",
+      "apkMs": 1795875725000,
+      "url": "https://github.com/azataslan065-png/futbol-ligi/releases/download/um-gelistirici/s-y-mikro-dunya-1795875724408.apk",
+      "store": "https://azataslan065-png.github.io/uygulama-merkezi/#/app/mikro-dunya"
+    },
     "kumanda": {
       "name": "Kumanda",
       "version": "1.0.0",
