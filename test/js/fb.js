@@ -61,6 +61,7 @@
       try { this.user = (await this.auth.signInWithEmailAndPassword(email, pw)).user; return this.user; } catch (e) { throw niceErr(e); }
     },
     async signOut() { await this.init({ anon: false }); await this.auth.signOut(); this.user = null; },
+    async anon() { await this.init({ anon: false }); this.user = (await this.auth.signInAnonymously()).user; return this.user; },
     async resetPassword(email) { await this.init({ anon: false }); try { await this.auth.sendPasswordResetEmail(email); } catch (e) { throw niceErr(e); } },
     isAnon() { return !!(this.user && this.user.isAnonymous); },
     async pushToken(swReg) {
@@ -119,6 +120,7 @@
     async remove(p) { await this.set(p, null); },
     async signIn(email, pw) { if (pw.length < 6) { const e = new Error("E-posta ya da şifre hatalı."); e.code = "auth"; throw e; } localStorage.setItem(MU, "OWNER"); this.user = { uid: "OWNER", isAnonymous: false, email }; return this.user; },
     async signOut() { localStorage.removeItem(MU); this.user = null; },
+    async anon() { const id = "anon" + Math.random().toString(36).slice(2, 8); localStorage.setItem(MU, id); this.user = { uid: id, isAnonymous: true }; return this.user; },
     async resetPassword() {},
     isAnon() { return !!(this.user && this.user.isAnonymous); },
     async pushToken() { throw new Error("Yerel denemede bildirim yok"); }
