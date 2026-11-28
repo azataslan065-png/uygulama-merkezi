@@ -1,9 +1,9 @@
 {
-  "updatedAt": "2026-11-28T02:46:07.420Z",
+  "updatedAt": "2026-11-28T02:46:41.136Z",
   "apps": {
     "skorbord": {
       "name": "Skorbord",
-      "version": "1.0.59",
+      "version": "1.0.0",
       "updated": "2026-11-28",
       "paket": "com.azat.skorbord.test",
       "apkMs": 1795829294000,
