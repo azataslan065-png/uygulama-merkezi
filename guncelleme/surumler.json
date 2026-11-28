@@ -1,11 +1,11 @@
 {
-  "updatedAt": "2026-11-28T05:47:15.379Z",
+  "updatedAt": "2026-11-28T05:52:34.665Z",
   "apps": {
     "skorbord": {
       "name": "Skorbord",
       "version": "1.0.0",
       "updated": "2026-11-28",
-      "paket": "com.azat.skorbord.test",
+      "paket": "",
       "apkMs": 1795829294000,
       "url": "https://azataslan065-png.github.io/skorbord/",
       "store": "https://azataslan065-png.github.io/uygulama-merkezi/#/app/skorbord"
